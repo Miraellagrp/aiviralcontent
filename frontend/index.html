@@ -373,24 +373,23 @@
             
             try {
                 // Call your API
-                const response = await fetch('const response = await fetch('https://aiviralcontent-api.onrender.com/generate-titles', {/generate-titles', {)
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        topic: topic
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Display results
-                displayTitles(data.titles);
-                
-            } catch (error) {
-                // Fallback titles if API is not running
-                const fallbackTitles = [
+           const response = await fetch('https://aiviralcontent-api.onrender.com/generate-titles', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        topic: topic
+    })
+});
+
+const data = await response.json();
+displayTitles(data.titles);
+
+} catch (error) {
+    // Fallback titles if API is not running
+    const fallbackTitles = [
+               
                     `How ${topic} Changed My Life Forever`,
                     `The Truth About ${topic} Nobody Tells You`,
                     `I Tried ${topic} for 30 Days (Shocking Results!)`,
