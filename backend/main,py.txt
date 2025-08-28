@@ -1,0 +1,35 @@
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(title="AI Viral Content API")
+
+@app.get("/")
+def read_root():
+    return {"message": "AI Viral Content API is running!"}
+
+@app.get("/test")
+def test_endpoint():
+    return {"status": "Working!", "domain": "aiviralcontent.io"}
+
+class TitleRequest(BaseModel):
+    topic: str
+    niche: str = "general"
+
+@app.post("/generate-title")
+def generate_title(request: TitleRequest):
+    # For now, just return a test response
+    return {
+        "topic": request.topic,
+        "titles": [
+            f"How I {request.topic} (Shocking Results!)",
+            f"The Truth About {request.topic} Nobody Talks About",
+            f"I Tried {request.topic} for 30 Days - Here's What Happened",
+            f"Stop {request.topic} Wrong! Do This Instead",
+            f"Why {request.topic} Changed Everything"
+        ]
+    }

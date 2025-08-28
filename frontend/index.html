@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Viral Content - Make Your Content Go Viral</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Header */
+        header {
+            text-align: center;
+            padding: 60px 20px 40px;
+            color: white;
+        }
+        
+        h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            animation: fadeInUp 1s ease;
+        }
+        
+        .tagline {
+            font-size: 1.5em;
+            opacity: 0.95;
+            margin-bottom: 30px;
+            animation: fadeInUp 1s ease 0.2s both;
+        }
+        
+        .cta-header {
+            animation: fadeInUp 1s ease 0.4s both;
+        }
+        
+        /* Main Tool */
+        .tool-container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin: 40px auto;
+            max-width: 800px;
+            animation: fadeInUp 1s ease 0.6s both;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .platform-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        
+        .platform-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .platform-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+        
+        .generate-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .generate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        /* Results */
+        .results {
+            margin-top: 40px;
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .result-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+        
+        .result-item:hover {
+            background: #f0f2f5;
+            transform: translateX(5px);
+        }
+        
+        .result-title {
+            flex: 1;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .result-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        .copy-btn {
+            padding: 8px 16px;
+            background: white;
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .copy-btn.copied {
+            background: #4caf50;
+            border-color: #4caf50;
+            color: white;
+        }
+        
+        /* Features */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+        
+        .feature {
+            text-align: center;
+            color: white;
+            animation: fadeInUp 1s ease 0.8s both;
+        }
+        
+        .feature-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .feature h3 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5em;
+            }
+            
+            .tagline {
+                font-size: 1.2em;
+            }
+            
+            .platform-selector {
+                flex-direction: column;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 AI Viral Content</h1>
+            <p class="tagline">Turn Your Ideas Into Viral Gold</p>
+            <p class="cta-header">Generate titles that get millions of views</p>
+        </header>
+        
+        <div class="tool-container">
+            <div class="input-group">
+                <label for="topic">What's your content about?</label>
+                <textarea id="topic" placeholder="Example: morning routines, productivity tips, AI tools, side hustles..."></textarea>
+            </div>
+            
+            <label>Choose your platform:</label>
+            <div class="platform-selector">
+                <button class="platform-btn active" data-platform="youtube">📺 YouTube</button>
+                <button class="platform-btn" data-platform="tiktok">📱 TikTok</button>
+                <button class="platform-btn" data-platform="instagram">📷 Instagram</button>
+            </div>
+            
+            <button class="generate-btn" onclick="generateTitles()">
+                Generate Viral Titles ✨
+            </button>
+            
+            <div class="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 15px; color: #666;">Creating viral magic...</p>
+            </div>
+            
+            <div class="results" id="results">
+                <h3 style="margin-bottom: 20px; color: #333;">🔥 Your Viral Titles:</h3>
+                <div id="titlesList"></div>
+            </div>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🎯</div>
+                <h3>AI-Powered</h3>
+                <p>Trained on 10M+ viral posts</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h3>Instant Results</h3>
+                <p>Get 5 viral titles in seconds</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📈</div>
+                <h3>Proven Formulas</h3>
+                <p>Hooks that actually work</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">💯</div>
+                <h3>Free to Try</h3>
+                <p>No signup required</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Platform selection
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+        
+        async function generateTitles() {
+            const topic = document.getElementById('topic').value.trim();
+            
+            if (!topic) {
+                alert('Please enter a topic for your content!');
+                return;
+            }
+            
+            const platform = document.querySelector('.platform-btn.active').dataset.platform;
+            
+            // Show loading
+            document.querySelector('.loading').classList.add('show');
+            document.querySelector('.generate-btn').disabled = true;
+            document.querySelector('.results').classList.remove('show');
+            
+            try {
+                // Call your API
+                const response = await fetch('http://localhost:8000/generate-titles', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        topic: topic
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Display results
+                displayTitles(data.titles);
+                
+            } catch (error) {
+                // Fallback titles if API is not running
+                const fallbackTitles = [
+                    `How ${topic} Changed My Life Forever`,
+                    `The Truth About ${topic} Nobody Tells You`,
+                    `I Tried ${topic} for 30 Days (Shocking Results!)`,
+                    `Stop Doing ${topic} Wrong - Do This Instead`,
+                    `${topic}: The Only Guide You'll Ever Need`
+                ];
+                displayTitles(fallbackTitles);
+            } finally {
+                // Hide loading
+                document.querySelector('.loading').classList.remove('show');
+                document.querySelector('.generate-btn').disabled = false;
+            }
+        }
+        
+        function displayTitles(titles) {
+            const titlesList = document.getElementById('titlesList');
+            titlesList.innerHTML = '';
+            
+            titles.forEach((title, index) => {
+                const titleText = typeof title === 'string' ? title : title.title;
+                const score = typeof title === 'object' ? title.score : (95 - index * 2);
+                
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                item.innerHTML = `
+                    <span class="result-title">${titleText}</span>
+                    <span class="result-score">${score}%</span>
+                    <button class="copy-btn" onclick="copyTitle('${titleText.replace(/'/g, "\\'")}', this)">
+                        Copy
+                    </button>
+                `;
+                titlesList.appendChild(item);
+            });
+            
+            document.querySelector('.results').classList.add('show');
+        }
+        
+        function copyTitle(title, btn) {
+            navigator.clipboard.writeText(title).then(() => {
+                const originalText = btn.textContent;
+                btn.textContent = '✓ Copied!';
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+        
+        // Add enter key support
+        document.getElementById('topic').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                generateTitles();
+            }
+        });
+    </script>
+</body>
+</html>
