@@ -1,1 +1,3 @@
-"# AI Viral Content - Day 1 of Something Big" 
+# AI Viral Content - The Beginning 
+Started: Today 
+Mission: Make every creator go viral 
