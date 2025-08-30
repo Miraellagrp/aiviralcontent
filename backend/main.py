@@ -1,4 +1,9 @@
 
+# Simple test endpoint to verify deployment
+@app.get("/test")
+async def test():
+	return {"status": "ok"}
+
 
 
 
