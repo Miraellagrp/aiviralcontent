@@ -1,10 +1,13 @@
 
 
 
+
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 import stripe
 import os
+
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 app = FastAPI()
 
