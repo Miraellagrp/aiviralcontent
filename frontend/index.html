@@ -1,6 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Facebook Pixel Code -->
+    <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', 'YOUR_PIXEL_ID'); // <-- Replace with your Facebook Pixel ID
+    fbq('track', 'PageView');
+    </script>
+    <!-- End Facebook Pixel Code -->
+        <!-- Google Analytics -->
+        <!-- Google tag (gtag.js) -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-JPSN299T7R"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-JPSN299T7R');
+        </script>
+        <!-- End Google Analytics -->
     <link rel="stylesheet" href="main.css">
     <!-- Facebook Pixel Code (add your Pixel ID below) -->
     <!--
@@ -539,39 +563,49 @@
 document.getElementById('checkout-button').addEventListener('click', async () => {
 <!-- Stripe Checkout Integration removed: now using direct payment link above -->
 </body>
+        <script>
+            // Facebook Pixel event tracking for content generation
+            document.querySelector('.generate-btn').addEventListener('click', function() {
+                fbq('track', 'GeneratedContent');
+            });
+            // Facebook Pixel event tracking for checkout initiation
+            document.querySelector('a[href*="buy.stripe.com"]').addEventListener('click', function() {
+                fbq('track', 'InitiateCheckout');
+            });
+        </script>
                 <!-- MailerLite Email Collection Script -->
                 <script>
-                    document.getElementById('lead-form').addEventListener('submit', function(e) {
-                        e.preventDefault();
-                        const email = this.querySelector('input[type="email"]').value;
-                        const messageEl = document.getElementById('form-message');
-                        messageEl.textContent = "Sending...";
-                        // Send to MailerLite
-                        fetch('https://connect.mailerlite.com/api/subscribers', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': 'Bearer YOUR_MAILERLITE_API_KEY'
-                            },
-                            body: JSON.stringify({
-                                email: email,
-                                groups: ["Lead Magnet Subscribers"]
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.error) {
-                                messageEl.textContent = "Error: Please try again.";
-                            } else {
-                                messageEl.textContent = "Check your email for the templates!";
-                                localStorage.setItem('userEmail', email);
-                            }
-                        })
-                        .catch(error => {
-                            messageEl.textContent = "Error: Please try again.";
-                            console.error('Error:', error);
-                        });
-                    });
+                                document.getElementById('lead-form').addEventListener('submit', function(e) {
+                                    e.preventDefault();
+                                    const email = this.querySelector('input[type="email"]').value;
+                                    const messageEl = document.getElementById('form-message');
+                                    messageEl.textContent = "Sending...";
+                                    // Send to MailerLite
+                                    fetch('https://connect.mailerlite.com/api/subscribers', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiZDkyZWEwMWIyYjU5NDYyZjBlZDNjNTdlOWIzNjQxODViOTU2MzFiNTg1OWI5ZTRmY2RiN2UzNzZiOWVjOTRjNTc2NDViYTE3MTk4OTJmMDIiLCJpYXQiOjE3NTY1ODE3MDIuMTE3NDgsIm5iZiI6MTc1NjU4MTcwMi4xMTc0ODIsImV4cCI6NDkxMjI1NTMwMi4xMTMyODQsInN1YiI6IjE3ODI0NTMiLCJzY29wZXMiOltdfQ.Pc4q_sg1ARLp5JbpUkQ2ld05VaLHyKVBR6IJugjYJO0uRgePlbnmRgfJwWcKGI4Rj6zCR5PSbFhJ0orkf-RvoPLbQ7rPNlMKiZjkxZYSkh8sRGnwNS4-qTUpWG8JIydFR49smEbOJzcGe5dRpzI79Zst0APWUSGmhk2o9kPT_AQNZeXekhOtyIO-LNxrZQggbM44vITDCJ3fR9IajfdXqlICkZEsECGeatg5hhqM-QNZ07RRZWoiGIyux1AOFoNuKmaJTpfWsJJUIEpIwKaG6Kg2fI4-sml9JH5KKPb6anC8MHBQBdelnD4TssYdaLotK946_x1DXOG9Mrb4phzpVf08j7T-SFwErbjdbVG1p33xbxMMenMn1yZme9kXTSHaMqjIF25wu_VzR_oU8siC-nKqJrheW0IYONdUplZ4ICirW7zwo5-TO-zEnq99mFcwBQj9gwzFDuXevya4Zoz5T930BhHH402V6ZR6SdZGKZioDsWsrcka7m5Md38K-jFX1VrO6PQbV-EkMvAJL3uAUKktW452kHQSD6zjrLBN3mDkU_x1jy4m216HZHh7SGLznKEv7Or0xOA4eldSgydfM_3rJlWMTr6FSA3m8LjIuZ_5nftP6YK2GfBjoEFJTyS5ibLwJHRCh4EqKCbXinRx9cFHXIhFAZd34wdPrLSWu6I'
+                                        },
+                                        body: JSON.stringify({
+                                            email: email,
+                                            groups: ["Lead Magnet Subscribers"]
+                                        })
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.error) {
+                                            messageEl.textContent = "Error: Please try again.";
+                                        } else {
+                                            messageEl.textContent = "Check your email for the templates!";
+                                            localStorage.setItem('userEmail', email);
+                                        }
+                                    })
+                                    .catch(error => {
+                                        messageEl.textContent = "Error: Please try again.";
+                                        console.error('Error:', error);
+                                    });
+                                });
                 </script>
 
                 <!-- Social Proof Notifications -->
