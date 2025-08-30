@@ -1,8 +1,11 @@
 
+
 import stripe
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -20,14 +23,7 @@ app.add_middleware(
 # Stripe configuration
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
-# Your domain - UPDATE THIS with your actual URL
 YOUR_DOMAIN = "https://aiviralcontent-frontend.onrender.com"  # Change this to your real domain
-from pydantic import BaseModel
-from dotenv import load_dotenv
-
-load_dotenv()
-
-app = FastAPI(title="AI Viral Content API")
 
 @app.get("/")
 def read_root():
