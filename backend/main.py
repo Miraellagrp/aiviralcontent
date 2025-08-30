@@ -1,17 +1,14 @@
 
 
-import stripe
-import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from pydantic import BaseModel
+import stripe
+import os
 
-load_dotenv()
+app = FastAPI()
 
-app = FastAPI(title="AI Viral Content API")
-
-# Enable CORS for payment processing
+# Add CORS middleware
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=["https://aiviralcontent-frontend.onrender.com"],
@@ -20,34 +17,25 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
-# Stripe configuration
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
-YOUR_DOMAIN = "https://aiviralcontent-frontend.onrender.com"  # Change this to your real domain
-
-@app.get("/")
-def read_root():
-	return {"message": "Welcome to AI Viral Content API"}
-
-# Payment endpoint
 @app.post("/create-checkout-session")
 async def create_checkout_session():
 	try:
+		YOUR_DOMAIN = "https://aiviralcontent-frontend.onrender.com"
 		checkout_session = stripe.checkout.Session.create(
 			payment_method_types=['card'],
-			line_items=[
-				{
-					'price_data': {
-						'currency': 'usd',
-						'product_data': {
-							'name': 'AIViralContent Pro - Lifetime Access',
-							'description': 'Generate unlimited viral titles forever!',
-						},
-						'unit_amount': 2999,  # $29.99 in cents
+			line_items=[{
+				'price_data': {
+					'currency': 'usd',
+					'product_data': {
+						'name': 'AI Viral Content Pro - Lifetime Access',
+						'description': 'Generate unlimited viral titles forever!',
 					},
-					'quantity': 1,
+					'unit_amount': 2999,
 				},
-			],
+				'quantity': 1,
+			}],
 			mode='payment',
 			success_url=YOUR_DOMAIN + '/success.html',
 			cancel_url=YOUR_DOMAIN + '/',
