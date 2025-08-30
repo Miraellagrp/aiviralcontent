@@ -1,17 +1,18 @@
 
 
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+
 import stripe
 import os
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Add CORS middleware
+# Allow all origins for testing
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["https://aiviralcontent-frontend.onrender.com"],
+	allow_origins=["*"],
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
@@ -19,28 +20,30 @@ app.add_middleware(
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
+# Stripe Checkout endpoint
 @app.post("/create-checkout-session")
 async def create_checkout_session():
 	try:
-		YOUR_DOMAIN = "https://aiviralcontent-frontend.onrender.com"
 		checkout_session = stripe.checkout.Session.create(
 			payment_method_types=['card'],
-			line_items=[{
-				'price_data': {
-					'currency': 'usd',
-					'product_data': {
-						'name': 'AI Viral Content Pro - Lifetime Access',
-						'description': 'Generate unlimited viral titles forever!',
+			line_items=[
+				{
+					'price_data': {
+						'currency': 'usd',
+						'product_data': {
+							'name': 'AI Viral Content Pro',
+							'description': 'Lifetime access',
+						},
+						'unit_amount': 2999,  # $29.99 in cents
 					},
-					'unit_amount': 2999,
+					'quantity': 1,
 				},
-				'quantity': 1,
-			}],
+			],
 			mode='payment',
-			success_url=YOUR_DOMAIN + '/success.html',
-			cancel_url=YOUR_DOMAIN + '/',
+			success_url='https://aiviralcontent-frontend.onrender.com/success.html',
+			cancel_url='https://aiviralcontent-frontend.onrender.com/',
 		)
 		return {"checkout_url": checkout_session.url}
 	except Exception as e:
 		print(f"Stripe error: {str(e)}")
-		raise HTTPException(status_code=400, detail=str(e))
+		return {"error": str(e)}
