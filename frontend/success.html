@@ -38,10 +38,14 @@
 </head>
 <body>
     <div class="container">
-        <div class="emoji">🎉</div>
-        <h1>Payment Successful!</h1>
-        <p>You now have lifetime access to AI Viral Content Pro!</p>
-        <p>Check your email for your receipt.</p>
+        <h1>Thank You for Your Purchase!</h1>
+        <p>Your payment was successful and you now have <strong>lifetime access</strong> to AI Viral Content Pro.</p>
+        <p>You can now generate unlimited viral titles for your social media content.</p>
+        <script>
+            // Mark user as premium in localStorage
+            localStorage.setItem('isPremium', 'true');
+            localStorage.removeItem('freeUsesLeft');
+        </script>
         <a href="/" class="button">Start Creating Viral Content</a>
     </div>
 </body>
