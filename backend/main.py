@@ -1,11 +1,4 @@
 
-# Simple test endpoint to verify deployment
-@app.get("/test")
-async def test():
-	return {"status": "ok"}
-
-
-
 
 import stripe
 import os
@@ -24,6 +17,11 @@ app.add_middleware(
 )
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+
+# Simple test endpoint to verify deployment
+@app.get("/test")
+async def test():
+	return {"status": "ok"}
 
 # Stripe Checkout endpoint
 @app.post("/create-checkout-session")
