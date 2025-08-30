@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Test</title>
+</head>
+<body>
+  <h2>API Test</h2>
+  <button id="testRoot">Test Root Endpoint</button>
+  <button id="testCheckout">Test Checkout Endpoint</button>
+  <div id="result"></div>
+
+  <script>
+    document.getElementById('testRoot').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Testing root endpoint...';
+      
+      try {
+        // Test the root endpoint (which we know exists)
+        const response = await fetch('https://aiviralcontent-api.onrender.com/');
+        const data = await response.json();
+        resultDiv.innerHTML = 'Root endpoint: ' + JSON.stringify(data);
+      } catch (error) {
+        resultDiv.innerHTML = 'Root endpoint error: ' + error.message;
+      }
+    });
+
+    document.getElementById('testCheckout').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Testing checkout endpoint...';
+      
+      try {
+        // Test the checkout endpoint with proper headers
+        const response = await fetch('https://aiviralcontent-api.onrender.com/create-checkout-session', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'}
+        });
+        const data = await response.json();
+        resultDiv.innerHTML = 'Checkout endpoint: ' + JSON.stringify(data);
+      } catch (error) {
+        resultDiv.innerHTML = 'Checkout endpoint error: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
