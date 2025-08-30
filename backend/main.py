@@ -11,7 +11,7 @@ app = FastAPI(title="AI Viral Content API")
 # Enable CORS for payment processing
 app.add_middleware(
 	CORSMiddleware,
-	allow_origins=["https://aiviralcontent-frontend.onrender.com"],  # Your frontend URL
+	allow_origins=["https://aiviralcontent-frontend.onrender.com", "*"],
 	allow_credentials=True,
 	allow_methods=["*"],
 	allow_headers=["*"],
