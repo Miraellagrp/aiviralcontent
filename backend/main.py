@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 # Stripe configuration
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 # Your domain - UPDATE THIS with your actual URL
 YOUR_DOMAIN = "https://aiviralcontent-frontend.onrender.com"  # Change this to your real domain
