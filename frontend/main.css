@@ -1,0 +1,77 @@
+/* main.css for AI Viral Content frontend */
+
+/* Lead Magnet Form */
+.lead-magnet-form {
+  background: white;
+  padding: 30px;
+  border-radius: 15px;
+  margin: 30px auto;
+  max-width: 600px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.lead-magnet-form h2 {
+  margin-bottom: 10px;
+}
+.lead-magnet-form input[type="email"] {
+  width: 70%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+.lead-magnet-form button[type="submit"] {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* Payment Section */
+.payment-section {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 30px;
+  border-radius: 15px;
+  margin: 30px auto;
+  text-align: center;
+  max-width: 500px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+.payment-section h2,
+.payment-section p,
+.payment-section a {
+  color: white;
+}
+.payment-section a {
+  display: inline-block;
+  background: white;
+  color: #667eea;
+  padding: 15px 30px;
+  border-radius: 25px;
+  font-weight: bold;
+  text-decoration: none;
+  font-size: 18px;
+  margin-bottom: 15px;
+}
+.payment-section .subtext {
+  color: rgba(255,255,255,0.8);
+  font-size: 14px;
+}
+
+/* Remaining Uses */
+#remaining-uses {
+  text-align: center;
+  color: #667eea;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+/* Misc */
+.creating-magic {
+  margin-top: 15px;
+  color: #666;
+}
+.viral-titles-header {
+  margin-bottom: 20px;
+  color: #333;
+}

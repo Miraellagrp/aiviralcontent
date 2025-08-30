@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="stylesheet" href="main.css">
+    <!-- Facebook Pixel Code (add your Pixel ID below) -->
+    <!--
+    <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', 'YOUR_PIXEL_ID');
+    fbq('track', 'PageView');
+    </script>
+    -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Viral Content - Make Your Content Go Viral</title>
@@ -288,16 +304,27 @@
     </style>
 </head>
 <body>
+                <!-- Lead Magnet Capture Form -->
+                <div style="background: white; padding: 30px; border-radius: 15px; margin: 30px auto; max-width: 600px; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
+                    <h2>Get 10 Free Viral Title Templates</h2>
+                    <p>Enter your email to receive templates that have generated millions of views</p>
+                    <form id="lead-form">
+                        <input type="email" placeholder="Your email" required style="width: 70%; padding: 12px; border: 1px solid #ddd; border-radius: 5px;">
+                        <button type="submit" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer;">Get Templates</button>
+                    </form>
+                    <p id="form-message"></p>
+                </div>
         <!-- Payment Section -->
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; margin: 30px auto; text-align: center; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        <div class="payment-section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; margin: 30px auto; text-align: center; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
             <h2 style="color: white; margin-bottom: 15px;">Get Lifetime Access</h2>
             <p style="color: white; margin-bottom: 20px;">Generate unlimited viral titles with one payment</p>
-            <a href="https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00" 
+            <a href="https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00" id="stripe-payment-btn"
                style="display: inline-block; background: white; color: #667eea; padding: 15px 30px; border-radius: 25px; font-weight: bold; text-decoration: none; font-size: 18px; margin-bottom: 15px;">
                 Get Lifetime Access - $29.99
             </a>
             <p style="color: rgba(255,255,255,0.8); font-size: 14px;">⚡ Join 127+ creators already using AI Viral Content</p>
         </div>
+        <div id="remaining-uses" style="text-align:center; color:#667eea; font-weight:bold; margin-bottom:10px;"></div>
         <div class="container">
         <header>
             <h1>🚀 AI Viral Content</h1>
@@ -366,6 +393,21 @@
     </div>
     
     <script>
+        // Show remaining uses on page load
+        function updateRemainingUses() {
+            const isPremium = checkPremiumStatus();
+            if (isPremium) {
+                document.getElementById('remaining-uses').textContent = '';
+                return;
+            }
+            let usesLeft = localStorage.getItem('freeUsesLeft');
+            if (usesLeft === null) {
+                usesLeft = 10;
+                localStorage.setItem('freeUsesLeft', usesLeft);
+            }
+            document.getElementById('remaining-uses').textContent = `${usesLeft} free generations remaining`;
+        }
+        updateRemainingUses();
         // Premium check and free use limit
         function checkPremiumStatus() {
             return localStorage.getItem('isPremium') === 'true';
@@ -394,11 +436,27 @@ displayTitles(data.titles);
                 }
                 if (usesLeft <= 0) {
                     alert("You've used all your free generations. Upgrade to Pro for unlimited access!");
+                    document.querySelector('.payment-section').scrollIntoView({behavior: 'smooth'});
                     return;
                 }
                 usesLeft--;
                 localStorage.setItem('freeUsesLeft', usesLeft);
+                // Show remaining uses
+                const remainingText = `${usesLeft} free generations remaining`;
+                document.getElementById('remaining-uses').textContent = remainingText;
             }
+        // Conversion tracking for Stripe payment button
+        document.getElementById('stripe-payment-btn').addEventListener('click', function() {
+            // Track payment button click
+            console.log('Payment button clicked');
+            // If you have Google Analytics
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'begin_checkout', {
+                    'event_category': 'ecommerce',
+                    'event_label': 'AI Viral Content Pro'
+                });
+            }
+        });
             const platform = document.querySelector('.platform-btn.active').dataset.platform;
             // Show loading
             document.querySelector('.loading').classList.add('show');
@@ -482,4 +540,80 @@ displayTitles(data.titles);
 document.getElementById('checkout-button').addEventListener('click', async () => {
 <!-- Stripe Checkout Integration removed: now using direct payment link above -->
 </body>
+                <!-- MailerLite Email Collection Script -->
+                <script>
+                    document.getElementById('lead-form').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const email = this.querySelector('input[type="email"]').value;
+                        const messageEl = document.getElementById('form-message');
+                        messageEl.textContent = "Sending...";
+                        // Send to MailerLite
+                        fetch('https://connect.mailerlite.com/api/subscribers', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer YOUR_MAILERLITE_API_KEY'
+                            },
+                            body: JSON.stringify({
+                                email: email,
+                                groups: ["Lead Magnet Subscribers"]
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                messageEl.textContent = "Error: Please try again.";
+                            } else {
+                                messageEl.textContent = "Check your email for the templates!";
+                                localStorage.setItem('userEmail', email);
+                            }
+                        })
+                        .catch(error => {
+                            messageEl.textContent = "Error: Please try again.";
+                            console.error('Error:', error);
+                        });
+                    });
+                </script>
+
+                <!-- Social Proof Notifications -->
+                <script>
+                    function showSocialProof() {
+                        const notifications = [
+                            "John from New York just generated viral titles",
+                            "Sarah just upgraded to lifetime access",
+                            "Mike from California got 3x engagement with our titles",
+                            "Emma just saved 2 hours on content planning"
+                        ];
+                        const notification = notifications[Math.floor(Math.random() * notifications.length)];
+                        const element = document.createElement('div');
+                        element.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: white; padding: 15px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); max-width: 300px; z-index: 1000; animation: fadeIn 0.5s;';
+                        element.innerHTML = notification;
+                        document.body.appendChild(element);
+                        setTimeout(() => {
+                            element.style.animation = 'fadeOut 0.5s forwards';
+                            setTimeout(() => element.remove(), 500);
+                        }, 5000);
+                    }
+                    // Add CSS for animations
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        @keyframes fadeIn {
+                            from { opacity: 0; transform: translateY(20px); }
+                            to { opacity: 1; transform: translateY(0); }
+                        }
+                        @keyframes fadeOut {
+                            from { opacity: 1; transform: translateY(0); }
+                            to { opacity: 0; transform: translateY(20px); }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    // Show notification every 45-60 seconds
+                    setInterval(() => {
+                        if (Math.random() > 0.3) {
+                            showSocialProof();
+                        }
+                    }, Math.floor(Math.random() * 15000) + 45000);
+                    // Show first notification after 30 seconds
+                    setTimeout(showSocialProof, 30000);
+                </script>
 </html>
