@@ -328,6 +328,15 @@
     </style>
 </head>
 <body>
+        <div class="video-gemini-section" style="max-width:600px;margin:40px auto 0 auto;padding:24px;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.07);">
+            <h2>AI Video Title & Hashtag Generator</h2>
+            <form id="gemini-form" style="margin-bottom:20px;">
+                <input type="text" id="youtube-url" placeholder="Paste YouTube video URL" style="width:70%;padding:10px;border-radius:5px;border:1px solid #ccc;">
+                <button type="submit" style="padding:10px 18px;border-radius:5px;background:#667eea;color:#fff;border:none;cursor:pointer;">Generate</button>
+            </form>
+            <div id="video-embed" style="margin-bottom:18px;"></div>
+            <div id="gemini-output" style="font-size:1.1em;"></div>
+        </div>
                 <!-- Lead Magnet Capture Form -->
                 <div style="background: white; padding: 30px; border-radius: 15px; margin: 30px auto; max-width: 600px; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
                     <h2>Get 10 Free Viral Title Templates</h2>
@@ -563,6 +572,34 @@
 document.getElementById('checkout-button').addEventListener('click', async () => {
 <!-- Stripe Checkout Integration removed: now using direct payment link above -->
 </body>
+        <script>
+            // Helper to extract YouTube video ID
+            function getYouTubeId(url) {
+                const match = url.match(/(?:youtu.be\/|youtube.com\/(?:watch\?v=|embed\/|v\/|shorts\/)?)([\w-]{11})/);
+                return match ? match[1] : null;
+            }
+            document.getElementById('gemini-form').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const url = document.getElementById('youtube-url').value.trim();
+                const videoId = getYouTubeId(url);
+                const videoEmbed = document.getElementById('video-embed');
+                const outputDiv = document.getElementById('gemini-output');
+                outputDiv.textContent = 'Generating...';
+                if (videoId) {
+                    videoEmbed.innerHTML = `<iframe width="100%" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+                } else {
+                    videoEmbed.innerHTML = '';
+                }
+                try {
+                    const resp = await fetch(`http://127.0.0.1:8000/generate-gemini?youtube_url=${encodeURIComponent(url)}`);
+                    if (!resp.ok) throw new Error('API error');
+                    const data = await resp.json();
+                    outputDiv.innerHTML = `<b>Title:</b> ${data.description}<br><b>Hashtags:</b> ${data.keywords}`;
+                } catch (err) {
+                    outputDiv.textContent = 'Error generating title/hashtags.';
+                }
+            });
+        </script>
         <script>
             // Facebook Pixel event tracking for content generation
             document.querySelector('.generate-btn').addEventListener('click', function() {
