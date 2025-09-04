@@ -5,3 +5,19 @@ __pycache__/
 venv/ 
 .idea/ 
 *.pyc 
+
+# Google Cloud Service Account Keys (NEVER COMMIT THESE!)
+*service-account*.json
+*serviceaccount*.json
+*service_account*.json
+service-account-key.json
+google-credentials.json
+gcloud-service-key.json
+*-key.json
+credentials.json
+*-credentials.json
+
+# Local development
+.env.local
+.env.development
+backend/*.json
