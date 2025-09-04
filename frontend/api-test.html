@@ -6,7 +6,8 @@
 <body>
   <h2>API Test</h2>
   <button id="testRoot">Test Root Endpoint</button>
-  <button id="testCheckout">Test Checkout Endpoint</button>
+  <button id="testPayment">Test Payment Link</button>
+  <button id="testTitles">Test Title Generation</button>
   <div id="result"></div>
 
   <script>
@@ -15,29 +16,41 @@
       resultDiv.innerHTML = 'Testing root endpoint...';
       
       try {
-        // Test the root endpoint (which we know exists)
         const response = await fetch('https://aiviralcontent-api.onrender.com/');
         const data = await response.json();
-        resultDiv.innerHTML = 'Root endpoint: ' + JSON.stringify(data);
+        resultDiv.innerHTML = '<strong>✅ Root endpoint:</strong><br>' + JSON.stringify(data, null, 2);
       } catch (error) {
-        resultDiv.innerHTML = 'Root endpoint error: ' + error.message;
+        resultDiv.innerHTML = '<strong>❌ Root endpoint error:</strong> ' + error.message;
       }
     });
 
-    document.getElementById('testCheckout').addEventListener('click', async () => {
+    document.getElementById('testPayment').addEventListener('click', async () => {
       const resultDiv = document.getElementById('result');
-      resultDiv.innerHTML = 'Testing checkout endpoint...';
+      resultDiv.innerHTML = 'Testing payment link...';
       
       try {
-        // Test the checkout endpoint with proper headers
-        const response = await fetch('https://aiviralcontent-api.onrender.com/create-checkout-session', {
+        const response = await fetch('https://aiviralcontent-api.onrender.com/payment-link');
+        const data = await response.json();
+        resultDiv.innerHTML = '<strong>✅ Payment link:</strong><br>' + JSON.stringify(data, null, 2);
+      } catch (error) {
+        resultDiv.innerHTML = '<strong>❌ Payment link error:</strong> ' + error.message;
+      }
+    });
+
+    document.getElementById('testTitles').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Testing title generation...';
+      
+      try {
+        const response = await fetch('https://aiviralcontent-api.onrender.com/generate-titles', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'}
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({topic: 'AI Tools'})
         });
         const data = await response.json();
-        resultDiv.innerHTML = 'Checkout endpoint: ' + JSON.stringify(data);
+        resultDiv.innerHTML = '<strong>✅ Title generation:</strong><br>' + JSON.stringify(data, null, 2);
       } catch (error) {
-        resultDiv.innerHTML = 'Checkout endpoint error: ' + error.message;
+        resultDiv.innerHTML = '<strong>❌ Title generation error:</strong> ' + error.message;
       }
     });
   </script>

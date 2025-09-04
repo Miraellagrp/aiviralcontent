@@ -231,6 +231,115 @@
                 updateScarcity();
             }
         }, 120000);
+
+        // API Base URL
+        const API_BASE = 'https://aiviralcontent-api.onrender.com';
+
+        // Gemini Form Handler
+        document.getElementById('gemini-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const youtubeUrl = document.getElementById('youtube-url').value;
+            const outputDiv = document.getElementById('gemini-output');
+            const embedDiv = document.getElementById('video-embed');
+            
+            if (!youtubeUrl.trim()) {
+                outputDiv.innerHTML = '<p style="color: red;">Please enter a YouTube URL</p>';
+                return;
+            }
+
+            // Show loading
+            outputDiv.innerHTML = '<p>🤖 AI is analyzing your video... This may take a few seconds...</p>';
+            
+            try {
+                // Extract video ID and show embed
+                const videoId = extractYouTubeVideoId(youtubeUrl);
+                if (videoId) {
+                    embedDiv.innerHTML = `
+                        <div style="max-width: 560px; margin: 20px auto;">
+                            <iframe width="100%" height="315" src="https://www.youtube.com/embed/${videoId}" 
+                                frameborder="0" allowfullscreen></iframe>
+                        </div>`;
+                }
+
+                // Call Gemini API
+                const response = await fetch(`${API_BASE}/generate-gemini?youtube_url=${encodeURIComponent(youtubeUrl)}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    outputDiv.innerHTML = `
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                            <h3 style="color: #667eea; margin-bottom: 15px;">🎯 Viral Title Suggestion:</h3>
+                            <p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">${data.description}</p>
+                            <h4 style="color: #764ba2; margin-bottom: 10px;">🔥 Trending Hashtags:</h4>
+                            <p style="font-size: 1.1em;">${data.keywords}</p>
+                            <button onclick="copyToClipboard('${data.description}', '${data.keywords}')" 
+                                style="background: #667eea; color: white; border: none; padding: 10px 20px; 
+                                border-radius: 8px; cursor: pointer; margin-top: 15px;">
+                                📋 Copy Title & Hashtags
+                            </button>
+                        </div>`;
+                } else {
+                    throw new Error(data.detail || 'Failed to generate content');
+                }
+            } catch (error) {
+                outputDiv.innerHTML = `
+                    <div style="background: #ffe6e6; padding: 15px; border-radius: 8px; color: #d63384;">
+                        ⚠️ ${error.message}<br>
+                        <small>Try again or check if the YouTube URL is valid and public.</small>
+                    </div>`;
+            }
+        });
+
+        // Lead Form Handler
+        document.getElementById('lead-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = e.target.querySelector('input[type="email"]').value;
+            const messageDiv = document.getElementById('form-message');
+            
+            // Simple email templates (you can replace this with actual email service)
+            messageDiv.innerHTML = `
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px; color: #155724; margin-top: 10px;">
+                    ✅ Thanks! Check your email for the viral title templates.
+                </div>`;
+            e.target.reset();
+        });
+
+        // Helper Functions
+        function extractYouTubeVideoId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        function copyToClipboard(title, hashtags) {
+            const text = `${title}\n\n${hashtags}`;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ Copied to clipboard! Paste it on your social media post.');
+            }).catch(() => {
+                alert('📋 Title: ' + title + '\n\nHashtags: ' + hashtags);
+            });
+        }
+
+        // Update payment link to use API
+        document.addEventListener('DOMContentLoaded', () => {
+            const paymentBtn = document.getElementById('stripe-payment-btn');
+            if (paymentBtn) {
+                paymentBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    try {
+                        const response = await fetch(`${API_BASE}/payment-link`);
+                        const data = await response.json();
+                        if (data.checkout_url) {
+                            window.location.href = data.checkout_url;
+                        }
+                    } catch (error) {
+                        console.error('Payment link error:', error);
+                        // Fallback to hardcoded link
+                        window.location.href = 'https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00';
+                    }
+                });
+            }
+        });
     </script>
     <!-- ...rest of your scripts (social proof, analytics, MailerLite, etc.)... -->
 </body>
