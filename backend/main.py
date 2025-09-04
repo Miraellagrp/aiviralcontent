@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Response, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import stripe
 import os
 import logging
 from typing import Optional
@@ -82,21 +81,13 @@ async def test_checkout_options(response: Response):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Stripe
-stripe_key = os.environ.get("STRIPE_SECRET_KEY")
-if not stripe_key:
-	logger.warning("STRIPE_SECRET_KEY not found in environment variables")
-else:
-	stripe.api_key = stripe_key
-	logger.info("Stripe API key configured")
-
-# Add a test endpoint to verify Stripe key presence
+# Add a test endpoint to verify environment
 @app.get("/test-env")
 async def test_env():
-	has_stripe_key = bool(os.environ.get("STRIPE_SECRET_KEY"))
 	return {
-		"stripe_key_exists": has_stripe_key,
-		"stripe_key_prefix": os.environ.get("STRIPE_SECRET_KEY", "")[:4] + "..." if has_stripe_key else "Not set"
+		"genai_available": GENAI_AVAILABLE,
+		"environment": os.environ.get("ENVIRONMENT", "development"),
+		"service_status": "running"
 	}
 
 # Configure CORS
@@ -122,61 +113,7 @@ app.add_middleware(
 
 # Add manual CORS headers to the checkout endpoint
 
-@app.post("/create-checkout-session")
-async def create_checkout_session(response: Response):
-	# Set explicit CORS headers
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	
-	if not stripe.api_key:
-		logger.error("Stripe API key not configured")
-		raise HTTPException(status_code=500, detail="Payment system not configured")
-	
-	try:
-		# Log the Stripe key prefix (redacted)
-		key_prefix = stripe.api_key[:4] if stripe.api_key else "None"
-		logger.info(f"Creating checkout session with Stripe key: {key_prefix}...")
-
-		checkout_session = stripe.checkout.Session.create(
-			payment_method_types=['card'],
-			line_items=[
-				{
-					'price_data': {
-						'currency': 'usd',
-						'product_data': {
-							'name': 'AI Viral Content Pro',
-							'description': 'Lifetime access',
-						},
-						'unit_amount': 2999,
-					},
-					'quantity': 1,
-				},
-			],
-			mode='payment',
-			success_url='https://aiviralcontent-frontend.onrender.com/success.html',
-			cancel_url='https://aiviralcontent-frontend.onrender.com/',
-		)
-		logger.info(f"Stripe checkout session created: {checkout_session.id}")
-		return {
-			"checkout_url": checkout_session.url,
-			"session_id": checkout_session.id,
-			"status": "success"
-		}
-	except stripe.error.StripeError as e:
-		logger.error(f"Stripe error: {str(e)}")
-		raise HTTPException(status_code=400, detail=f"Payment error: {str(e)}")
-	except Exception as e:
-		logger.error(f"Unexpected error: {str(e)}")
-		raise HTTPException(status_code=500, detail="Internal server error")
-
-# Add an OPTIONS handler for the checkout endpoint
-@app.options("/create-checkout-session")
-async def create_checkout_session_options(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "https://aiviralcontent-frontend.onrender.com"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	return {}
+# Removed complex Stripe checkout - using payment links instead
 
 # Gemini API endpoint
 @app.get("/generate-gemini", response_model=GeminiResponse)
