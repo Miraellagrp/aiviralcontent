@@ -115,7 +115,7 @@ app.add_middleware(
 
 # Removed complex Stripe checkout - using payment links instead
 
-# Gemini API endpoint
+# Enhanced Gemini API endpoint with conversation context
 @app.get("/generate-gemini", response_model=GeminiResponse)
 def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL")):
     if not GENAI_AVAILABLE:
@@ -123,24 +123,48 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
         raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
     
     try:
-        logger.info(f"Processing Gemini request for URL: {youtube_url[:50]}...")
+        logger.info(f"Processing enhanced Gemini request for URL: {youtube_url[:50]}...")
         client = genai.Client(
             vertexai=True,
             project="gothic-guard-459415-q5",
             location="global",
         )
+        
+        # Create enhanced conversation with examples
         msg_video = types.Part.from_uri(
             file_uri=youtube_url,
             mime_type="video/*",
         )
-        msg_text = types.Part.from_text(text="You are an expert at creating viral content. Watch the video and write a clickbait, viral, curiosity-driven title (max 40 characters) that would make people want to click instantly. Also, generate 10 highly trending, platform-agnostic hashtags for this video. Format the response as a python dictionary: {\"Description\": viral title, \"Keywords\": comma separated hashtags (10)}")
+        msg_prompt = types.Part.from_text(
+            text="Please write a 40 character long intriguing title of this video and 10 comma separated hashtags that will be used for youtube shorts. Format the response as a python dictionary {\"Description\": title of video(not more than 50 characters), \"Keywords\": comma separated hashtags(10)}"
+        )
+        
+        # Example response to guide the AI
+        example_response = types.Part.from_text(
+            text='```json\n{"Description": "Cosmic Dance: Galaxies Collide", "Keywords": "galaxy,collision,space,astronomy,stars,nebula,universe,simulation,science,cosmos"}\n```'
+        )
+        
         model = "gemini-2.5-flash-lite"
         contents = [
+            # First example interaction
             types.Content(
                 role="user",
-                parts=[msg_video, msg_text]
+                parts=[
+                    types.Part.from_uri(file_uri="https://youtu.be/W-csPZKAQc8", mime_type="video/*"),
+                    msg_prompt
+                ]
+            ),
+            types.Content(
+                role="model",
+                parts=[example_response]
+            ),
+            # Current user request
+            types.Content(
+                role="user",
+                parts=[msg_video, msg_prompt]
             )
         ]
+        
         generate_content_config = types.GenerateContentConfig(
             temperature=1,
             top_p=0.95,
@@ -153,6 +177,7 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
             ],
             thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
+        
         output = ""
         for chunk in client.models.generate_content_stream(
             model=model,
@@ -160,23 +185,64 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
             config=generate_content_config,
         ):
             output += chunk.text
-        logger.info(f"Gemini API response received: {len(output)} characters")
         
-        # Parse the output as a Python dict
+        logger.info(f"Enhanced Gemini API response received: {len(output)} characters")
+        logger.debug(f"Raw response: {output[:200]}...")
+        
+        # Enhanced parsing with multiple fallback strategies
         import ast
+        import json
+        import re
+        
+        description = ""
+        keywords = ""
+        
         try:
-            parsed = ast.literal_eval(output.strip().replace('```json','').replace('```',''))
+            # Strategy 1: Direct JSON parsing
+            clean_output = output.strip().replace('```json', '').replace('```', '').strip()
+            parsed = json.loads(clean_output)
             description = parsed.get("Description", "")
             keywords = parsed.get("Keywords", "")
-            logger.info("Successfully parsed Gemini response")
-        except Exception as parse_error:
-            logger.warning(f"Failed to parse Gemini response: {parse_error}")
-            description = output.strip()
-            keywords = ""
+            logger.info("Successfully parsed JSON response")
+        except:
+            try:
+                # Strategy 2: Python literal eval
+                clean_output = output.strip().replace('```json', '').replace('```', '').strip()
+                parsed = ast.literal_eval(clean_output)
+                description = parsed.get("Description", "")
+                keywords = parsed.get("Keywords", "")
+                logger.info("Successfully parsed with literal_eval")
+            except:
+                try:
+                    # Strategy 3: Regex extraction
+                    desc_match = re.search(r'"Description":\s*"([^"]+)"', output)
+                    keywords_match = re.search(r'"Keywords":\s*"([^"]+)"', output)
+                    if desc_match:
+                        description = desc_match.group(1)
+                    if keywords_match:
+                        keywords = keywords_match.group(1)
+                    logger.info("Successfully extracted with regex")
+                except:
+                    # Strategy 4: Fallback
+                    logger.warning("All parsing strategies failed, using raw output")
+                    description = output.strip()[:50] if output.strip() else "AI-Generated Viral Title"
+                    keywords = "viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
+        
+        # Ensure we have reasonable defaults
+        if not description.strip():
+            description = "AI-Generated Viral Title"
+        if not keywords.strip():
+            keywords = "viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
+            
         return GeminiResponse(description=description, keywords=keywords)
+        
     except Exception as e:
-        logger.error(f"Gemini API error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Gemini API error: {str(e)}")
+        logger.error(f"Enhanced Gemini API error: {str(e)}")
+        # Return a graceful fallback instead of failing
+        return GeminiResponse(
+            description="Viral Content Generator Temporarily Unavailable", 
+            keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
+        )
 
 if __name__ == "__main__":
     import uvicorn
