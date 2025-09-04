@@ -124,11 +124,29 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
     
     try:
         logger.info(f"Processing enhanced Gemini request for URL: {youtube_url[:50]}...")
-        client = genai.Client(
-            vertexai=True,
-            project="gothic-guard-459415-q5",
-            location="global",
-        )
+        # Try different project IDs based on available credentials
+        project_ids = [
+            "gothic-guard-459415-q5",  # Original project
+            "custom-tine-464511-u1",    # From user's credentials
+            os.environ.get("GOOGLE_CLOUD_PROJECT", "gothic-guard-459415-q5")
+        ]
+        
+        client = None
+        for project_id in project_ids:
+            try:
+                client = genai.Client(
+                    vertexai=True,
+                    project=project_id,
+                    location="global",
+                )
+                logger.info(f"Successfully connected to project: {project_id}")
+                break
+            except Exception as e:
+                logger.debug(f"Failed to connect to project {project_id}: {str(e)}")
+                continue
+        
+        if not client:
+            raise Exception("Unable to connect to any Google Cloud project")
         
         # Create enhanced conversation with examples
         msg_video = types.Part.from_uri(
