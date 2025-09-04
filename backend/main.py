@@ -1,15 +1,47 @@
-# Simple endpoint for a hardcoded payment link
-@app.get("/simple-payment")
-async def simple_payment(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	return {"checkout_url": "https://buy.stripe.com/test_aEU5lO8Io7CB36E6oo"}
-
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import stripe
 import os
+import logging
+from typing import Optional
+try:
+    from google import genai
+    from google.genai import types
+    GENAI_AVAILABLE = True
+except ImportError:
+    GENAI_AVAILABLE = False
+    logging.warning("Google GenAI not available - install with: pip install google-genai")
 
-app = FastAPI()
+app = FastAPI(title="AI Viral Content API", version="1.0.0")
+
+# Pydantic models
+class TitleRequest(BaseModel):
+    topic: str
+
+class GeminiResponse(BaseModel):
+    description: str
+    keywords: str
+
+# Basic endpoints
+@app.get("/")
+def root():
+    return {"message": "AI Viral Content API is LIVE!", "domain": "aiviralcontent.io"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+@app.post("/generate-titles")
+def generate_titles(request: TitleRequest):
+    titles = [
+        f"How {request.topic} Changed My Life Forever",
+        f"The Dark Truth About {request.topic}",
+        f"I Tried {request.topic} for 30 Days - Shocking Results!",
+        f"Why Everyone's Wrong About {request.topic}",
+        f"{request.topic}: The Complete Guide You Need"
+    ]
+    return {"topic": request.topic, "titles": titles}
 
 # Simple payment link endpoint for Stripe
 @app.get("/payment-link")
@@ -46,11 +78,17 @@ async def test_checkout_options(response: Response):
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
 	return {}
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize Stripe
 stripe_key = os.environ.get("STRIPE_SECRET_KEY")
 if not stripe_key:
-	print("ERROR: No Stripe API key found in environment variables")
-	# Optionally, you can raise an error or return a clear message in your endpoints
-stripe.api_key = stripe_key
+	logger.warning("STRIPE_SECRET_KEY not found in environment variables")
+else:
+	stripe.api_key = stripe_key
+	logger.info("Stripe API key configured")
 
 # Add a test endpoint to verify Stripe key presence
 @app.get("/test-env")
@@ -61,13 +99,18 @@ async def test_env():
 		"stripe_key_prefix": os.environ.get("STRIPE_SECRET_KEY", "")[:4] + "..." if has_stripe_key else "Not set"
 	}
 
-# Add CORS middleware with specific origins
+# Configure CORS
 origins = [
 	"https://aiviralcontent-frontend.onrender.com",
+	"https://aiviralcontent.io",
+	"https://aiviralcontent-api.onrender.com",
 	"http://localhost:3000",
 	"http://localhost:8000",
-	"*"  # For testing only - remove in production
 ]
+
+# Add wildcard for development only
+if os.environ.get("ENVIRONMENT") == "development":
+	origins.append("*")
 
 app.add_middleware(
 	CORSMiddleware,
@@ -85,10 +128,15 @@ async def create_checkout_session(response: Response):
 	response.headers["Access-Control-Allow-Origin"] = "*"
 	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+	
+	if not stripe.api_key:
+		logger.error("Stripe API key not configured")
+		raise HTTPException(status_code=500, detail="Payment system not configured")
+	
 	try:
 		# Log the Stripe key prefix (redacted)
 		key_prefix = stripe.api_key[:4] if stripe.api_key else "None"
-		print(f"Using Stripe key starting with: {key_prefix}...")
+		logger.info(f"Creating checkout session with Stripe key: {key_prefix}...")
 
 		checkout_session = stripe.checkout.Session.create(
 			payment_method_types=['card'],
@@ -109,16 +157,18 @@ async def create_checkout_session(response: Response):
 			success_url='https://aiviralcontent-frontend.onrender.com/success.html',
 			cancel_url='https://aiviralcontent-frontend.onrender.com/',
 		)
-		print(f"Stripe checkout session created: {checkout_session.id}")
-		print(f"Checkout URL: {checkout_session.url}")
+		logger.info(f"Stripe checkout session created: {checkout_session.id}")
 		return {
 			"checkout_url": checkout_session.url,
 			"session_id": checkout_session.id,
 			"status": "success"
 		}
+	except stripe.error.StripeError as e:
+		logger.error(f"Stripe error: {str(e)}")
+		raise HTTPException(status_code=400, detail=f"Payment error: {str(e)}")
 	except Exception as e:
-		print(f"Stripe error: {str(e)}")
-		return {"error": str(e), "status": "error"}
+		logger.error(f"Unexpected error: {str(e)}")
+		raise HTTPException(status_code=500, detail="Internal server error")
 
 # Add an OPTIONS handler for the checkout endpoint
 @app.options("/create-checkout-session")
@@ -127,3 +177,71 @@ async def create_checkout_session_options(response: Response):
 	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
 	return {}
+
+# Gemini API endpoint
+@app.get("/generate-gemini", response_model=GeminiResponse)
+def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL")):
+    if not GENAI_AVAILABLE:
+        logger.error("Google GenAI not available")
+        raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
+    
+    try:
+        logger.info(f"Processing Gemini request for URL: {youtube_url[:50]}...")
+        client = genai.Client(
+            vertexai=True,
+            project="gothic-guard-459415-q5",
+            location="global",
+        )
+        msg_video = types.Part.from_uri(
+            file_uri=youtube_url,
+            mime_type="video/*",
+        )
+        msg_text = types.Part.from_text(text="You are an expert at creating viral content. Watch the video and write a clickbait, viral, curiosity-driven title (max 40 characters) that would make people want to click instantly. Also, generate 10 highly trending, platform-agnostic hashtags for this video. Format the response as a python dictionary: {\"Description\": viral title, \"Keywords\": comma separated hashtags (10)}")
+        model = "gemini-2.5-flash-lite"
+        contents = [
+            types.Content(
+                role="user",
+                parts=[msg_video, msg_text]
+            )
+        ]
+        generate_content_config = types.GenerateContentConfig(
+            temperature=1,
+            top_p=0.95,
+            max_output_tokens=1024,
+            safety_settings=[
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+            ],
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        )
+        output = ""
+        for chunk in client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=generate_content_config,
+        ):
+            output += chunk.text
+        logger.info(f"Gemini API response received: {len(output)} characters")
+        
+        # Parse the output as a Python dict
+        import ast
+        try:
+            parsed = ast.literal_eval(output.strip().replace('```json','').replace('```',''))
+            description = parsed.get("Description", "")
+            keywords = parsed.get("Keywords", "")
+            logger.info("Successfully parsed Gemini response")
+        except Exception as parse_error:
+            logger.warning(f"Failed to parse Gemini response: {parse_error}")
+            description = output.strip()
+            keywords = ""
+        return GeminiResponse(description=description, keywords=keywords)
+    except Exception as e:
+        logger.error(f"Gemini API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gemini API error: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

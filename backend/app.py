@@ -1,2 +1,1 @@
-from fastapi import FastAPI 
-app = FastAPI() 
+# This file is deprecated - all functionality moved to main.py

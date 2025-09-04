@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: aiviralcontent-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python start.py
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+    autoDeploy: true
+    rootDir: .
