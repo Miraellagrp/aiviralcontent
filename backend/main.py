@@ -7,6 +7,8 @@ from typing import Optional
 import json
 from datetime import datetime, timedelta
 import hashlib
+import requests
+import re
 try:
     from google import genai
     from google.genai import types
@@ -100,6 +102,89 @@ def check_rate_limit(ip: str) -> bool:
     limits[ip][today] += 1
     save_rate_limits(limits)
     return True
+
+def extract_youtube_video_id(url: str) -> str:
+    """Extract video ID from YouTube URL"""
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com.*[?&]v=([a-zA-Z0-9_-]{11})'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def check_video_duration(video_url: str) -> dict:
+    """Check if video is a YouTube Short (≤60 seconds)"""
+    try:
+        video_id = extract_youtube_video_id(video_url)
+        if not video_id:
+            return {"is_short": False, "error": "Invalid YouTube URL", "duration": None}
+        
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            # If we don't have API key, we'll assume it's allowed (fallback)
+            return {"is_short": True, "error": None, "duration": "unknown"}
+        
+        # YouTube Data API v3 call
+        youtube_api_url = f"https://www.googleapis.com/youtube/v3/videos"
+        params = {
+            "part": "contentDetails",
+            "id": video_id,
+            "key": api_key
+        }
+        
+        response = requests.get(youtube_api_url, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            logger.warning(f"YouTube API error: {response.status_code}")
+            # Fallback: allow the video if API fails
+            return {"is_short": True, "error": "API unavailable", "duration": "unknown"}
+        
+        data = response.json()
+        
+        if not data.get("items"):
+            return {"is_short": False, "error": "Video not found", "duration": None}
+        
+        duration_str = data["items"][0]["contentDetails"]["duration"]
+        
+        # Parse ISO 8601 duration (PT1M30S = 1 minute 30 seconds)
+        duration_seconds = parse_youtube_duration(duration_str)
+        
+        is_short = duration_seconds <= 60
+        
+        return {
+            "is_short": is_short,
+            "error": None,
+            "duration": duration_seconds,
+            "duration_str": duration_str
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking video duration: {str(e)}")
+        # Fallback: allow the video if checking fails
+        return {"is_short": True, "error": "Duration check failed", "duration": "unknown"}
+
+def parse_youtube_duration(duration_str: str) -> int:
+    """Parse YouTube API duration string (ISO 8601) to seconds"""
+    # PT1M30S -> 90 seconds
+    # PT45S -> 45 seconds  
+    # PT2M -> 120 seconds
+    
+    pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
+    match = re.match(pattern, duration_str)
+    
+    if not match:
+        return 0
+    
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)  
+    seconds = int(match.group(3) or 0)
+    
+    total_seconds = hours * 3600 + minutes * 60 + seconds
+    return total_seconds
 
 app = FastAPI(title="AI Viral Content API", version="1.0.0")
 
@@ -310,6 +395,18 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
             status_code=429, 
             detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
         )
+    
+    # Check if video is a Short (≤60 seconds)
+    duration_check = check_video_duration(youtube_url)
+    if not duration_check["is_short"]:
+        if duration_check["error"]:
+            logger.warning(f"Duration check error: {duration_check['error']} for URL: {youtube_url}")
+        else:
+            logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only YouTube Shorts (60 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
+            )
     
     try:
         logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")

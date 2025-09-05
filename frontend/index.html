@@ -138,7 +138,7 @@
     <div class="video-gemini-section">
         <h2>AI Video Title & Hashtag Generator</h2>
         <p style="background: #e8f4fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; color: #0066cc;">
-            🎁 <strong>3 free AI analyses per day</strong> • <a href="#stripe-payment-btn" style="color: #dc3545; font-weight: bold;">Get unlimited access for $29.99</a>
+            🎁 <strong>3 free YouTube Shorts analyses per day</strong> • <a href="#stripe-payment-btn" style="color: #dc3545; font-weight: bold;">Get unlimited full-length videos for $29.99</a>
         </p>
         <form id="gemini-form">
             <input type="text" id="youtube-url" placeholder="Paste any video URL (YouTube, TikTok, Instagram, etc.)" value="https://www.youtube.com/watch?v=2lp0GjX-6FM">
@@ -299,6 +299,22 @@
                             </a>
                             <p style="margin-top: 15px; font-size: 0.9em;">
                                 Or try again tomorrow for 3 more free uses!
+                            </p>
+                        </div>`;
+                } else if (error.message.includes('YouTube Shorts') || error.message.includes('60 seconds')) {
+                    outputDiv.innerHTML = `
+                        <div style="background: #e8f4fd; padding: 20px; border-radius: 12px; color: #0066cc; text-align: center;">
+                            <h3 style="color: #dc3545; margin-bottom: 15px;">📱 Shorts Only in Free Tier</h3>
+                            <p style="margin-bottom: 15px;">Free users can only analyze YouTube Shorts (60 seconds or less).</p>
+                            <p style="margin-bottom: 20px;"><strong>Want to analyze full-length videos?</strong></p>
+                            <a href="#stripe-payment-btn" onclick="document.getElementById('stripe-payment-btn').click()" 
+                               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
+                               padding: 15px 30px; border-radius: 25px; text-decoration: none; font-weight: bold;
+                               display: inline-block; margin: 10px;">
+                               🎯 Get Lifetime Access - $29.99
+                            </a>
+                            <p style="margin-top: 15px; font-size: 0.9em;">
+                                Or try with a YouTube Short (≤60 seconds)
                             </p>
                         </div>`;
                 } else {
