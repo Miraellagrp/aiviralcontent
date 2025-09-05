@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import hashlib
 import requests
 import re
+import hmac
 try:
     from google import genai
     from google.genai import types
@@ -53,6 +54,10 @@ else:
 # Rate limiting configuration
 DAILY_FREE_LIMIT = 3  # Free requests per day per IP
 RATE_LIMIT_FILE = "rate_limits.json"
+ACCESS_CODES_FILE = "access_codes.json"
+
+# Stripe configuration
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_test_key")  # Set this in your environment
 
 def get_client_ip(request: Request) -> str:
     """Get client IP address"""
@@ -102,6 +107,81 @@ def check_rate_limit(ip: str) -> bool:
     limits[ip][today] += 1
     save_rate_limits(limits)
     return True
+
+def get_access_codes() -> dict:
+    """Load access codes from file"""
+    if os.path.exists(ACCESS_CODES_FILE):
+        try:
+            with open(ACCESS_CODES_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_access_codes(codes: dict):
+    """Save access codes to file"""
+    with open(ACCESS_CODES_FILE, 'w') as f:
+        json.dump(codes, f, indent=2)
+
+def is_premium_user(access_code: str) -> bool:
+    """Check if access code is valid for premium access"""
+    if not access_code:
+        return False
+    
+    codes = get_access_codes()
+    return access_code in codes and codes[access_code].get("active", True)
+
+def generate_access_code() -> str:
+    """Generate a unique access code"""
+    import secrets
+    import string
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(12))
+
+def verify_stripe_signature(payload: bytes, sig_header: str, webhook_secret: str) -> bool:
+    """Verify Stripe webhook signature"""
+    try:
+        elements = sig_header.split(',')
+        timestamp = None
+        signatures = []
+        
+        for element in elements:
+            key, value = element.split('=')
+            if key == 't':
+                timestamp = value
+            elif key == 'v1':
+                signatures.append(value)
+        
+        if timestamp is None or not signatures:
+            return False
+        
+        # Create expected signature
+        signed_payload = f"{timestamp}.{payload.decode('utf-8')}"
+        expected_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            signed_payload.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+        return any(hmac.compare_digest(expected_signature, signature) for signature in signatures)
+    except Exception as e:
+        logger.error(f"Error verifying Stripe signature: {str(e)}")
+        return False
+
+def send_access_code_email(email: str, access_code: str) -> bool:
+    """Send access code via email (placeholder for now)"""
+    # TODO: Integrate with your email service (SendGrid, etc.)
+    logger.info(f"Would send access code {access_code} to {email}")
+    
+    # For now, just store in a file for you to manually send
+    try:
+        purchase_file = os.path.join(os.path.dirname(__file__), "purchases.txt")
+        with open(purchase_file, "a", encoding="utf-8") as f:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"{timestamp}: {email} -> {access_code}\n")
+        return True
+    except Exception as e:
+        logger.error(f"Error storing purchase info: {str(e)}")
+        return False
 
 def extract_youtube_video_id(url: str) -> str:
     """Extract video ID from YouTube URL"""
@@ -198,6 +278,9 @@ class GeminiResponse(BaseModel):
 
 class EmailSubscription(BaseModel):
     email: str
+
+class AccessCodeRequest(BaseModel):
+    access_code: str
 
 # Basic endpoints
 @app.get("/")
@@ -337,6 +420,181 @@ async def get_emails():
 		logger.error(f"Error reading emails: {str(e)}")
 		raise HTTPException(status_code=500, detail="Error reading email file")
 
+# Admin endpoint to generate access codes
+@app.post("/admin/generate-code")
+async def generate_code(admin_key: str = Query(..., description="Admin key for authentication")):
+	# Simple admin authentication (you can make this more secure)
+	if admin_key != "admin123":  # Change this to a secure admin key
+		raise HTTPException(status_code=401, detail="Unauthorized")
+	
+	try:
+		codes = get_access_codes()
+		new_code = generate_access_code()
+		
+		# Ensure code is unique
+		while new_code in codes:
+			new_code = generate_access_code()
+		
+		# Add new code
+		from datetime import datetime
+		codes[new_code] = {
+			"active": True,
+			"created_at": datetime.now().isoformat(),
+			"used": False
+		}
+		
+		save_access_codes(codes)
+		
+		return {
+			"access_code": new_code,
+			"message": "Access code generated successfully",
+			"total_codes": len(codes)
+		}
+	except Exception as e:
+		logger.error(f"Error generating access code: {str(e)}")
+		raise HTTPException(status_code=500, detail="Error generating access code")
+
+# Admin endpoint to view all access codes
+@app.get("/admin/access-codes")
+async def get_all_codes(admin_key: str = Query(..., description="Admin key for authentication")):
+	if admin_key != "admin123":  # Change this to a secure admin key
+		raise HTTPException(status_code=401, detail="Unauthorized")
+	
+	try:
+		codes = get_access_codes()
+		return {
+			"total_codes": len(codes),
+			"codes": codes
+		}
+	except Exception as e:
+		logger.error(f"Error reading access codes: {str(e)}")
+		raise HTTPException(status_code=500, detail="Error reading access codes")
+
+# Endpoint to verify access code (for frontend)
+@app.post("/verify-access-code")
+async def verify_code(code_request: AccessCodeRequest, response: Response):
+	response.headers["Access-Control-Allow-Origin"] = "*"
+	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"  
+	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+	
+	is_valid = is_premium_user(code_request.access_code)
+	
+	return {
+		"valid": is_valid,
+		"message": "Access code verified" if is_valid else "Invalid access code"
+	}
+
+# OPTIONS handler for verify access code endpoint
+@app.options("/verify-access-code")
+async def verify_code_options(response: Response):
+	response.headers["Access-Control-Allow-Origin"] = "*"
+	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+	return {}
+
+# Stripe webhook endpoint
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+	try:
+		payload = await request.body()
+		sig_header = request.headers.get("stripe-signature", "")
+		
+		# Verify webhook signature
+		if not verify_stripe_signature(payload, sig_header, STRIPE_WEBHOOK_SECRET):
+			logger.warning("Invalid Stripe webhook signature")
+			raise HTTPException(status_code=400, detail="Invalid signature")
+		
+		# Parse the webhook event
+		try:
+			event = json.loads(payload.decode("utf-8"))
+		except json.JSONDecodeError:
+			logger.error("Invalid JSON in webhook payload")
+			raise HTTPException(status_code=400, detail="Invalid JSON")
+		
+		# Handle successful payment
+		if event["type"] == "checkout.session.completed":
+			session = event["data"]["object"]
+			customer_email = session.get("customer_details", {}).get("email")
+			
+			if customer_email:
+				logger.info(f"Processing successful payment for {customer_email}")
+				
+				# Generate access code
+				codes = get_access_codes()
+				new_code = generate_access_code()
+				
+				# Ensure code is unique
+				while new_code in codes:
+					new_code = generate_access_code()
+				
+				# Save the access code
+				codes[new_code] = {
+					"active": True,
+					"created_at": datetime.now().isoformat(),
+					"customer_email": customer_email,
+					"stripe_session_id": session["id"],
+					"auto_generated": True
+				}
+				
+				save_access_codes(codes)
+				
+				# Send access code (for now, stores in file for manual sending)
+				send_access_code_email(customer_email, new_code)
+				
+				logger.info(f"Generated access code {new_code} for {customer_email}")
+			else:
+				logger.warning("No customer email in Stripe session")
+		
+		return {"status": "success"}
+		
+	except HTTPException:
+		raise
+	except Exception as e:
+		logger.error(f"Error processing Stripe webhook: {str(e)}")
+		raise HTTPException(status_code=500, detail="Webhook processing failed")
+
+# Admin endpoint to view purchases
+@app.get("/admin/purchases")
+async def get_purchases(admin_key: str = Query(..., description="Admin key for authentication")):
+	if admin_key != "admin123":  # Change this to a secure admin key
+		raise HTTPException(status_code=401, detail="Unauthorized")
+	
+	try:
+		purchase_file = os.path.join(os.path.dirname(__file__), "purchases.txt")
+		if os.path.exists(purchase_file):
+			with open(purchase_file, "r", encoding="utf-8") as f:
+				content = f.read()
+			
+			# Parse purchases into structured format
+			lines = content.strip().split('\n')
+			purchases = []
+			for line in lines:
+				if line.strip() and ':' in line and ' -> ' in line:
+					try:
+						timestamp, email_code = line.split(': ', 1)
+						email, code = email_code.split(' -> ')
+						purchases.append({
+							"timestamp": timestamp,
+							"email": email.strip(),
+							"access_code": code.strip()
+						})
+					except:
+						continue
+			
+			return {
+				"total_purchases": len(purchases),
+				"purchases": purchases,
+				"raw_content": content
+			}
+		else:
+			return {
+				"total_purchases": 0,
+				"purchases": [],
+				"message": "No purchases yet"
+			}
+	except Exception as e:
+		logger.error(f"Error reading purchases: {str(e)}")
+		raise HTTPException(status_code=500, detail="Error reading purchase file")
 
 # Add a test endpoint to verify environment
 @app.get("/test-env")
@@ -382,35 +640,40 @@ app.add_middleware(
 
 # Enhanced Gemini API endpoint with conversation context
 @app.get("/generate-gemini", response_model=GeminiResponse)
-def generate_gemini(request: Request, youtube_url: str = Query(..., description="YouTube video URL")):
+def generate_gemini(request: Request, youtube_url: str = Query(..., description="YouTube video URL"), access_code: Optional[str] = Query(None, description="Premium access code")):
     if not GENAI_AVAILABLE:
         logger.error("Google GenAI not available")
         raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
     
-    # Check rate limiting
-    client_ip = get_client_ip(request)
-    if not check_rate_limit(client_ip):
-        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-        raise HTTPException(
-            status_code=429, 
-            detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
-        )
+    # Check if user has premium access
+    is_premium = is_premium_user(access_code)
     
-    # Check if video is a Short (≤30 seconds)
-    duration_check = check_video_duration(youtube_url)
-    if not duration_check["is_short"]:
-        if duration_check["error"]:
-            logger.warning(f"Duration check error: {duration_check['error']} for URL: {youtube_url}")
+    # Check rate limiting (skip for premium users)
+    if not is_premium:
+        client_ip = get_client_ip(request)
+        if not check_rate_limit(client_ip):
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
             raise HTTPException(
-                status_code=400,
-                detail=f"Unable to verify video duration. Only short videos (30 seconds or less) are supported in the free tier. Please use a valid YouTube video URL or upgrade to lifetime access at aiviralcontent.io"
+                status_code=429, 
+                detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
             )
-        else:
-            logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only short videos (30 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
-            )
+    
+    # Check video duration (skip for premium users)
+    if not is_premium:
+        duration_check = check_video_duration(youtube_url)
+        if not duration_check["is_short"]:
+            if duration_check["error"]:
+                logger.warning(f"Duration check error: {duration_check['error']} for URL: {youtube_url}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unable to verify video duration. Only short videos (30 seconds or less) are supported in the free tier. Please use a valid YouTube video URL or upgrade to lifetime access at aiviralcontent.io"
+                )
+            else:
+                logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only short videos (30 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
+                )
     
     try:
         logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")
