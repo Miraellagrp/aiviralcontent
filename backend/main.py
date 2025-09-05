@@ -5,12 +5,12 @@ import os
 import logging
 from typing import Optional
 try:
-    import vertexai
-    from vertexai.generative_models import GenerativeModel
+    from google import genai
+    from google.genai import types
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
-    logging.warning("Vertex AI not available - install with: pip install google-cloud-aiplatform")
+    logging.warning("Google GenAI not available - install with: pip install google-genai")
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
@@ -159,14 +159,16 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
     try:
         logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")
         
-        # Initialize Vertex AI
+        # Initialize GenAI client with Vertex AI
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", "custom-tine-464511-u1")
-        vertexai.init(project=project_id, location="us-central1")
         
-        # Create the model
-        model = GenerativeModel("gemini-1.5-flash")
+        client = genai.Client(
+            vertexai=True,
+            project=project_id,
+            location="us-central1"
+        )
         
-        logger.info(f"Successfully initialized Vertex AI with project: {project_id}")
+        logger.info(f"Successfully initialized Vertex AI client with project: {project_id}")
         
         # If we don't have proper credentials, use fallback
         if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") and not os.environ.get("GOOGLE_API_KEY"):
@@ -176,22 +178,35 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
                 keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
             )
         
-        # Create prompt for the video analysis
-        prompt = f"""Analyze this YouTube video: {youtube_url}
-
-Please write a 40 character long intriguing title for this video and provide 10 comma-separated hashtags that will be used for YouTube shorts.
-
-Format your response as a JSON object:
-{{"Description": "title of video (not more than 50 characters)", "Keywords": "comma separated hashtags (10)"}}
-
-Example:
-{{"Description": "Cosmic Dance: Galaxies Collide", "Keywords": "galaxy,collision,space,astronomy,stars,nebula,universe,simulation,science,cosmos"}}
-"""
+        # Create the content with video URL and prompt
+        prompt_text = """Please write a 40 character long intriguing title of this video and 10 comma separated hashtags that will be used for youtube shorts. Format the response as a python dictionary {"Description": title of video(not more than 50 characters), "Keywords": comma separated hashtags(10)}"""
+        
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_uri(file_uri=youtube_url, mime_type="video/*"),
+                    types.Part.from_text(text=prompt_text)
+                ]
+            )
+        ]
         
         output = ""
         try:
-            response = model.generate_content(prompt)
-            output = response.text
+            model = "gemini-1.5-flash"
+            generate_config = types.GenerateContentConfig(
+                temperature=1.0,
+                top_p=0.95,
+                max_output_tokens=1024,
+            )
+            
+            for chunk in client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=generate_config,
+            ):
+                output += chunk.text
+                
             logger.info(f"Vertex AI response received: {len(output)} characters")
         except Exception as generation_error:
             logger.warning(f"Generation error: {generation_error}, using fallback")
