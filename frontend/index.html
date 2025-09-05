@@ -137,6 +137,9 @@
     <!-- VIDEO TITLE & HASHTAG GENERATOR -->
     <div class="video-gemini-section">
         <h2>AI Video Title & Hashtag Generator</h2>
+        <p style="background: #e8f4fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center; color: #0066cc;">
+            🎁 <strong>3 free AI analyses per day</strong> • <a href="#stripe-payment-btn" style="color: #dc3545; font-weight: bold;">Get unlimited access for $29.99</a>
+        </p>
         <form id="gemini-form">
             <input type="text" id="youtube-url" placeholder="Paste any video URL (YouTube, TikTok, Instagram, etc.)" value="https://www.youtube.com/watch?v=2lp0GjX-6FM">
             <button type="submit">Generate</button>
@@ -282,11 +285,29 @@
                     throw new Error(data.detail || 'Failed to generate content');
                 }
             } catch (error) {
-                outputDiv.innerHTML = `
-                    <div style="background: #ffe6e6; padding: 15px; border-radius: 8px; color: #d63384;">
-                        ⚠️ ${error.message}<br>
-                        <small>Try again or check if the YouTube URL is valid and public.</small>
-                    </div>`;
+                if (error.message.includes('429') || error.message.includes('Daily free limit exceeded')) {
+                    outputDiv.innerHTML = `
+                        <div style="background: #fff3cd; padding: 20px; border-radius: 12px; color: #856404; text-align: center;">
+                            <h3 style="color: #dc3545; margin-bottom: 15px;">🚀 Daily Free Limit Reached!</h3>
+                            <p style="margin-bottom: 15px;">You've used your 3 free AI analyses for today.</p>
+                            <p style="margin-bottom: 20px;"><strong>Get unlimited access now!</strong></p>
+                            <a href="#stripe-payment-btn" onclick="document.getElementById('stripe-payment-btn').click()" 
+                               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
+                               padding: 15px 30px; border-radius: 25px; text-decoration: none; font-weight: bold;
+                               display: inline-block; margin: 10px;">
+                               🎯 Get Lifetime Access - $29.99
+                            </a>
+                            <p style="margin-top: 15px; font-size: 0.9em;">
+                                Or try again tomorrow for 3 more free uses!
+                            </p>
+                        </div>`;
+                } else {
+                    outputDiv.innerHTML = `
+                        <div style="background: #ffe6e6; padding: 15px; border-radius: 8px; color: #d63384;">
+                            ⚠️ ${error.message}<br>
+                            <small>Try again or check if the video URL is valid and public.</small>
+                        </div>`;
+                }
             }
         });
 

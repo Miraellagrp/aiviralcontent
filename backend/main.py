@@ -1,9 +1,12 @@
-from fastapi import FastAPI, Response, Query, HTTPException
+from fastapi import FastAPI, Response, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import logging
 from typing import Optional
+import json
+from datetime import datetime, timedelta
+import hashlib
 try:
     from google import genai
     from google.genai import types
@@ -44,6 +47,59 @@ else:
             logger.info("Using GOOGLE_API_KEY environment variable")
         else:
             logger.warning("No Google credentials found - Gemini API will use fallback responses")
+
+# Rate limiting configuration
+DAILY_FREE_LIMIT = 3  # Free requests per day per IP
+RATE_LIMIT_FILE = "rate_limits.json"
+
+def get_client_ip(request: Request) -> str:
+    """Get client IP address"""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def get_rate_limits() -> dict:
+    """Load rate limits from file"""
+    if os.path.exists(RATE_LIMIT_FILE):
+        try:
+            with open(RATE_LIMIT_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_rate_limits(limits: dict):
+    """Save rate limits to file"""
+    with open(RATE_LIMIT_FILE, 'w') as f:
+        json.dump(limits, f)
+
+def check_rate_limit(ip: str) -> bool:
+    """Check if IP has exceeded daily limit"""
+    limits = get_rate_limits()
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if ip not in limits:
+        limits[ip] = {}
+    
+    if today not in limits[ip]:
+        limits[ip][today] = 0
+    
+    # Clean old entries (older than 7 days)
+    cutoff_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    for user_ip in list(limits.keys()):
+        for date in list(limits[user_ip].keys()):
+            if date < cutoff_date:
+                del limits[user_ip][date]
+        if not limits[user_ip]:
+            del limits[user_ip]
+    
+    if limits[ip][today] >= DAILY_FREE_LIMIT:
+        return False
+    
+    limits[ip][today] += 1
+    save_rate_limits(limits)
+    return True
 
 app = FastAPI(title="AI Viral Content API", version="1.0.0")
 
@@ -203,10 +259,19 @@ app.add_middleware(
 
 # Enhanced Gemini API endpoint with conversation context
 @app.get("/generate-gemini", response_model=GeminiResponse)
-def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL")):
+def generate_gemini(request: Request, youtube_url: str = Query(..., description="YouTube video URL")):
     if not GENAI_AVAILABLE:
         logger.error("Google GenAI not available")
         raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
+    
+    # Check rate limiting
+    client_ip = get_client_ip(request)
+    if not check_rate_limit(client_ip):
+        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
+        )
     
     try:
         logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")
