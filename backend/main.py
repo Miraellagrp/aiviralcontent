@@ -55,6 +55,9 @@ class GeminiResponse(BaseModel):
     description: str
     keywords: str
 
+class EmailSubscription(BaseModel):
+    email: str
+
 # Basic endpoints
 @app.get("/")
 def root():
@@ -105,6 +108,51 @@ async def test_checkout(response: Response):
 # OPTIONS handler for the test endpoint
 @app.options("/test-checkout")
 async def test_checkout_options(response: Response):
+	response.headers["Access-Control-Allow-Origin"] = "*"
+	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+	return {}
+
+# Email subscription endpoint
+@app.post("/subscribe-email")
+async def subscribe_email(email_data: EmailSubscription, response: Response):
+	response.headers["Access-Control-Allow-Origin"] = "*"
+	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+	
+	try:
+		email = email_data.email.strip().lower()
+		
+		# Basic email validation
+		if not email or "@" not in email or "." not in email.split("@")[1]:
+			raise HTTPException(status_code=400, detail="Invalid email address")
+		
+		# Log the email (for now)
+		logger.info(f"New email subscription: {email}")
+		
+		# Store in a simple file for now (you can upgrade this later)
+		import os
+		emails_file = os.path.join(os.path.dirname(__file__), "subscriber_emails.txt")
+		with open(emails_file, "a", encoding="utf-8") as f:
+			from datetime import datetime
+			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+			f.write(f"{timestamp}: {email}\n")
+		
+		logger.info(f"Email {email} saved to subscriber list")
+		
+		return {
+			"success": True,
+			"message": "Successfully subscribed! Check your email for viral templates.",
+			"email": email
+		}
+		
+	except Exception as e:
+		logger.error(f"Email subscription error: {str(e)}")
+		raise HTTPException(status_code=500, detail="Failed to process subscription")
+
+# OPTIONS handler for email endpoint
+@app.options("/subscribe-email")
+async def subscribe_email_options(response: Response):
 	response.headers["Access-Control-Allow-Origin"] = "*"
 	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
