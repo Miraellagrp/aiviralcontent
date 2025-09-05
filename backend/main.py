@@ -692,7 +692,23 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
         logger.info("Successfully initialized GenAI client with API key")
         
         # Create the content with video URL and prompt
-        prompt_text = """Please write a 40 character long intriguing title of this video and 10 comma separated hashtags that will be used for youtube shorts. Format the response as a python dictionary {"Description": title of video(not more than 50 characters), "Keywords": comma separated hashtags(10)}"""
+        prompt_text = """You are a viral content expert. Analyze this video and create click-worthy content:
+
+1. Write an IRRESISTIBLE title (under 50 characters) that uses psychology to make people click:
+   - Use curiosity gaps ("This Changed Everything...")
+   - Create urgency ("Before It's Too Late")  
+   - Promise transformation ("From Zero to...")
+   - Use emotional triggers (shocking, amazing, secret)
+   - Include numbers when relevant ("3 Secrets...")
+
+2. Generate 10 trending hashtags mixing:
+   - Broad viral tags (#viral #fyp #trending)
+   - Content-specific tags (what's actually in the video)
+   - Niche community tags (target audience)
+
+Format response as: {"Description": "viral_title_here", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
+
+Make it IRRESISTIBLE - something people MUST click on!"""
         
         contents = [
             types.Content(

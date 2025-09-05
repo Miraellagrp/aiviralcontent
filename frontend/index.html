@@ -279,11 +279,25 @@
         // API Base URL
         const API_BASE = 'https://aiviralcontent-api.onrender.com';
 
+        // Load saved access code on page load
+        window.addEventListener('load', () => {
+            const savedCode = localStorage.getItem('premium_access_code');
+            if (savedCode) {
+                document.getElementById('access-code').value = savedCode;
+                document.getElementById('access-code').placeholder = 'Premium Access Code (saved)';
+            }
+        });
+
         // Gemini Form Handler
         document.getElementById('gemini-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const youtubeUrl = document.getElementById('youtube-url').value;
             const accessCode = document.getElementById('access-code').value;
+            
+            // Save access code to localStorage if provided
+            if (accessCode.trim()) {
+                localStorage.setItem('premium_access_code', accessCode.trim());
+            }
             const outputDiv = document.getElementById('gemini-output');
             const embedDiv = document.getElementById('video-embed');
             
