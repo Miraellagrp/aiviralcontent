@@ -255,14 +255,9 @@
                 const videoId = extractYouTubeVideoId(youtubeUrl);
                 if (videoId) {
                     embedDiv.innerHTML = `
-                        <div style="max-width: 560px; margin: 20px auto; text-align: center;">
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                                <p><strong>Video ID:</strong> ${videoId}</p>
-                                <a href="https://www.youtube.com/watch?v=${videoId}" target="_blank" rel="noopener" 
-                                   style="color: #667eea; text-decoration: none;">
-                                   🎥 Click to watch on YouTube
-                                </a>
-                            </div>
+                        <div style="max-width: 560px; margin: 20px auto;">
+                            <iframe width="100%" height="315" src="https://www.youtube.com/embed/${videoId}" 
+                                frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
                         </div>`;
                 }
 
