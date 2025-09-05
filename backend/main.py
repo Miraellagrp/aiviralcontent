@@ -214,6 +214,44 @@ async def subscribe_email_options(response: Response):
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
 	return {}
 
+# Endpoint to view captured emails (for admin use)
+@app.get("/admin/emails")
+async def get_emails():
+	try:
+		emails_file = os.path.join(os.path.dirname(__file__), "subscriber_emails.txt")
+		if os.path.exists(emails_file):
+			with open(emails_file, "r", encoding="utf-8") as f:
+				content = f.read()
+			
+			# Parse emails into structured format
+			lines = content.strip().split('\n')
+			emails = []
+			for line in lines:
+				if line.strip() and ':' in line:
+					try:
+						timestamp, email = line.split(': ', 1)
+						emails.append({
+							"timestamp": timestamp,
+							"email": email.strip()
+						})
+					except:
+						continue
+			
+			return {
+				"total_emails": len(emails),
+				"emails": emails,
+				"raw_content": content
+			}
+		else:
+			return {
+				"total_emails": 0,
+				"emails": [],
+				"message": "No emails captured yet"
+			}
+	except Exception as e:
+		logger.error(f"Error reading emails: {str(e)}")
+		raise HTTPException(status_code=500, detail="Error reading email file")
+
 
 # Add a test endpoint to verify environment
 @app.get("/test-env")
