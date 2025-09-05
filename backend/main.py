@@ -5,12 +5,12 @@ import os
 import logging
 from typing import Optional
 try:
-    from google import genai
-    from google.genai import types
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
-    logging.warning("Google GenAI not available - install with: pip install google-genai")
+    logging.warning("Vertex AI not available - install with: pip install google-cloud-aiplatform")
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +33,13 @@ else:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = f.name
             logger.info("Using GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
     else:
-        logger.warning("No Google credentials found - Gemini API will use fallback responses")
+        # Try to use API key if available
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if api_key:
+            os.environ["GOOGLE_API_KEY"] = api_key
+            logger.info("Using GOOGLE_API_KEY environment variable")
+        else:
+            logger.warning("No Google credentials found - Gemini API will use fallback responses")
 
 app = FastAPI(title="AI Viral Content API", version="1.0.0")
 
@@ -151,95 +157,44 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
         raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
     
     try:
-        logger.info(f"Processing enhanced Gemini request for URL: {youtube_url[:50]}...")
-        # Try different project IDs based on available credentials
-        project_ids = [
-            "gothic-guard-459415-q5",  # Original project
-            "custom-tine-464511-u1",    # From user's credentials
-            os.environ.get("GOOGLE_CLOUD_PROJECT", "gothic-guard-459415-q5")
-        ]
+        logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")
         
-        client = None
-        for project_id in project_ids:
-            try:
-                client = genai.Client(
-                    vertexai=True,
-                    project=project_id,
-                    location="global",
-                )
-                logger.info(f"Successfully connected to project: {project_id}")
-                break
-            except Exception as e:
-                logger.debug(f"Failed to connect to project {project_id}: {str(e)}")
-                if "reauthentication" in str(e).lower() or "login" in str(e).lower():
-                    logger.warning("Authentication issue detected, will use fallback")
-                continue
+        # Initialize Vertex AI
+        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", "custom-tine-464511-u1")
+        vertexai.init(project=project_id, location="us-central1")
         
-        if not client:
-            logger.warning("Unable to connect to any Google Cloud project, using fallback")
+        # Create the model
+        model = GenerativeModel("gemini-1.5-flash")
+        
+        logger.info(f"Successfully initialized Vertex AI with project: {project_id}")
+        
+        # If we don't have proper credentials, use fallback
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") and not os.environ.get("GOOGLE_API_KEY"):
+            logger.warning("No valid credentials found, using fallback")
             return GeminiResponse(
                 description="🚀 How This Video Could Go VIRAL! (AI Analysis)", 
                 keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
             )
         
-        # Create enhanced conversation with examples
-        msg_video = types.Part.from_uri(
-            file_uri=youtube_url,
-            mime_type="video/*",
-        )
-        msg_prompt = types.Part.from_text(
-            text="Please write a 40 character long intriguing title of this video and 10 comma separated hashtags that will be used for youtube shorts. Format the response as a python dictionary {\"Description\": title of video(not more than 50 characters), \"Keywords\": comma separated hashtags(10)}"
-        )
-        
-        # Example response to guide the AI
-        example_response = types.Part.from_text(
-            text='```json\n{"Description": "Cosmic Dance: Galaxies Collide", "Keywords": "galaxy,collision,space,astronomy,stars,nebula,universe,simulation,science,cosmos"}\n```'
-        )
-        
-        model = "gemini-2.5-flash-lite"
-        contents = [
-            # First example interaction
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_uri(file_uri="https://youtu.be/W-csPZKAQc8", mime_type="video/*"),
-                    msg_prompt
-                ]
-            ),
-            types.Content(
-                role="model",
-                parts=[example_response]
-            ),
-            # Current user request
-            types.Content(
-                role="user",
-                parts=[msg_video, msg_prompt]
-            )
-        ]
-        
-        generate_content_config = types.GenerateContentConfig(
-            temperature=1,
-            top_p=0.95,
-            max_output_tokens=1024,
-            safety_settings=[
-                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
-            ],
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
+        # Create prompt for the video analysis
+        prompt = f"""Analyze this YouTube video: {youtube_url}
+
+Please write a 40 character long intriguing title for this video and provide 10 comma-separated hashtags that will be used for YouTube shorts.
+
+Format your response as a JSON object:
+{{"Description": "title of video (not more than 50 characters)", "Keywords": "comma separated hashtags (10)"}}
+
+Example:
+{{"Description": "Cosmic Dance: Galaxies Collide", "Keywords": "galaxy,collision,space,astronomy,stars,nebula,universe,simulation,science,cosmos"}}
+"""
         
         output = ""
         try:
-            for chunk in client.models.generate_content_stream(
-                model=model,
-                contents=contents,
-                config=generate_content_config,
-            ):
-                output += chunk.text
-        except Exception as stream_error:
-            logger.warning(f"Streaming error: {stream_error}, using fallback")
+            response = model.generate_content(prompt)
+            output = response.text
+            logger.info(f"Vertex AI response received: {len(output)} characters")
+        except Exception as generation_error:
+            logger.warning(f"Generation error: {generation_error}, using fallback")
             return GeminiResponse(
                 description="🚀 How This Video Could Go VIRAL! (AI Analysis)", 
                 keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
