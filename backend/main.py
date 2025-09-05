@@ -28,10 +28,14 @@ else:
         # Write the credentials to a temporary file
         import tempfile
         import json
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(json.loads(google_credentials), f)
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = f.name
-            logger.info("Using GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump(json.loads(google_credentials), f)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = f.name
+                logger.info("Using GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in credentials environment variable: {e}")
+            logger.info("Continuing without service account credentials")
     else:
         # Try to use API key if available
         api_key = os.environ.get("GOOGLE_API_KEY")
