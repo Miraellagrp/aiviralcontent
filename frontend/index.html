@@ -142,8 +142,18 @@
         </p>
         <form id="gemini-form">
             <input type="text" id="youtube-url" placeholder="Paste any video URL (YouTube, TikTok, Instagram, etc.)" value="https://www.youtube.com/watch?v=2lp0GjX-6FM">
+            
+            <div style="margin: 15px 0;">
+                <label style="font-weight: bold; margin-bottom: 8px; display: block;">Content Type:</label>
+                <select id="content-type" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px;">
+                    <option value="viral">🔥 Viral Content (TikTok, Instagram, YouTube Shorts)</option>
+                    <option value="professional">💼 Professional Content (LinkedIn, Business)</option>
+                    <option value="educational">📚 Educational Content (Tutorials, How-to)</option>
+                </select>
+            </div>
+            
             <input type="text" id="access-code" placeholder="Premium Access Code (optional)" style="margin-top: 10px;">
-            <button type="submit">Generate</button>
+            <button type="submit">Generate Content</button>
         </form>
         <p style="font-size: 12px; color: #666; margin-top: 5px; text-align: center;">
             💎 Have a premium access code? Enter it above for unlimited video lengths and no daily limits!
@@ -293,6 +303,7 @@
             e.preventDefault();
             const youtubeUrl = document.getElementById('youtube-url').value;
             const accessCode = document.getElementById('access-code').value;
+            const contentType = document.getElementById('content-type').value;
             
             // Save access code to localStorage if provided
             if (accessCode.trim()) {
@@ -321,7 +332,7 @@
                 }
 
                 // Call Gemini API
-                let apiUrl = `${API_BASE}/generate-gemini?youtube_url=${encodeURIComponent(youtubeUrl)}`;
+                let apiUrl = `${API_BASE}/generate-gemini?youtube_url=${encodeURIComponent(youtubeUrl)}&content_type=${encodeURIComponent(contentType)}`;
                 if (accessCode.trim()) {
                     apiUrl += `&access_code=${encodeURIComponent(accessCode)}`;
                 }

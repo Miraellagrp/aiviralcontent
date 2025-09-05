@@ -167,6 +167,64 @@ def verify_stripe_signature(payload: bytes, sig_header: str, webhook_secret: str
         logger.error(f"Error verifying Stripe signature: {str(e)}")
         return False
 
+def get_specialized_prompt(content_type: str) -> str:
+    """Generate specialized prompts based on content type"""
+    
+    if content_type == "professional":
+        return """You are a LinkedIn content strategist and business communication expert. Analyze this video and create professional content:
+
+1. Write a COMPELLING professional title (under 50 characters) that:
+   - Focuses on business insights, leadership lessons, or industry trends
+   - Uses power words like "Strategy", "Leadership", "Innovation", "Growth" 
+   - Appeals to executives, entrepreneurs, and professionals
+   - Creates curiosity about business value ("The Leadership Lesson That...")
+
+2. Generate 10 professional hashtags mixing:
+   - LinkedIn algorithm tags (#Leadership #Innovation #Growth #Strategy)
+   - Industry-specific tags (based on video content)
+   - Business networking tags (#Entrepreneurship #CEO #Business)
+
+Format: {"Description": "professional_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
+
+Make it something a CEO would share on LinkedIn!"""
+
+    elif content_type == "educational":
+        return """You are an educational content expert specializing in tutorials and how-to content. Analyze this video and create educational content:
+
+1. Write a CLEAR educational title (under 50 characters) that:
+   - Promises specific learning outcomes ("How to Master...")
+   - Uses step-by-step language ("5 Steps to...", "Complete Guide...")
+   - Focuses on skills, knowledge, or problem-solving
+   - Appeals to learners and students ("Learn X in Y Minutes")
+
+2. Generate 10 educational hashtags mixing:
+   - Learning tags (#tutorial #howto #learn #education #tips)
+   - Skill-specific tags (based on video content)
+   - Student/learner tags (#study #knowledge #skills)
+
+Format: {"Description": "educational_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
+
+Make it irresistible to anyone wanting to learn!"""
+    
+    else:  # viral content (default)
+        return """You are a viral content expert. Analyze this video and create click-worthy content:
+
+1. Write an IRRESISTIBLE title (under 50 characters) that uses psychology to make people click:
+   - Use curiosity gaps ("This Changed Everything...")
+   - Create urgency ("Before It's Too Late")  
+   - Promise transformation ("From Zero to...")
+   - Use emotional triggers (shocking, amazing, secret)
+   - Include numbers when relevant ("3 Secrets...")
+
+2. Generate 10 trending hashtags mixing:
+   - Broad viral tags (#viral #fyp #trending #foryou)
+   - Content-specific tags (what's actually in the video)
+   - Platform-specific tags (#tiktok #reels #shorts)
+
+Format: {"Description": "viral_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
+
+Make it IRRESISTIBLE - something people MUST click on!"""
+
 def send_access_code_email(email: str, access_code: str) -> bool:
     """Send access code via email (placeholder for now)"""
     # TODO: Integrate with your email service (SendGrid, etc.)
@@ -640,7 +698,7 @@ app.add_middleware(
 
 # Enhanced Gemini API endpoint with conversation context
 @app.get("/generate-gemini", response_model=GeminiResponse)
-def generate_gemini(request: Request, youtube_url: str = Query(..., description="YouTube video URL"), access_code: Optional[str] = Query(None, description="Premium access code")):
+def generate_gemini(request: Request, youtube_url: str = Query(..., description="YouTube video URL"), access_code: Optional[str] = Query(None, description="Premium access code"), content_type: str = Query("viral", description="Content type: viral, professional, or educational")):
     if not GENAI_AVAILABLE:
         logger.error("Google GenAI not available")
         raise HTTPException(status_code=503, detail="Gemini API not available - missing dependency")
@@ -691,24 +749,8 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
         
         logger.info("Successfully initialized GenAI client with API key")
         
-        # Create the content with video URL and prompt
-        prompt_text = """You are a viral content expert. Analyze this video and create click-worthy content:
-
-1. Write an IRRESISTIBLE title (under 50 characters) that uses psychology to make people click:
-   - Use curiosity gaps ("This Changed Everything...")
-   - Create urgency ("Before It's Too Late")  
-   - Promise transformation ("From Zero to...")
-   - Use emotional triggers (shocking, amazing, secret)
-   - Include numbers when relevant ("3 Secrets...")
-
-2. Generate 10 trending hashtags mixing:
-   - Broad viral tags (#viral #fyp #trending)
-   - Content-specific tags (what's actually in the video)
-   - Niche community tags (target audience)
-
-Format response as: {"Description": "viral_title_here", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
-
-Make it IRRESISTIBLE - something people MUST click on!"""
+        # Get specialized prompt based on content type
+        prompt_text = get_specialized_prompt(content_type)
         
         contents = [
             types.Content(
