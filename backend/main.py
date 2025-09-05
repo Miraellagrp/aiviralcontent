@@ -117,7 +117,7 @@ def extract_youtube_video_id(url: str) -> str:
     return None
 
 def check_video_duration(video_url: str) -> dict:
-    """Check if video is a YouTube Short (≤60 seconds)"""
+    """Check if video is 30 seconds or less"""
     try:
         video_id = extract_youtube_video_id(video_url)
         if not video_id:
@@ -153,7 +153,7 @@ def check_video_duration(video_url: str) -> dict:
         # Parse ISO 8601 duration (PT1M30S = 1 minute 30 seconds)
         duration_seconds = parse_youtube_duration(duration_str)
         
-        is_short = duration_seconds <= 60
+        is_short = duration_seconds <= 30
         
         return {
             "is_short": is_short,
@@ -405,7 +405,7 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
             logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
             raise HTTPException(
                 status_code=400,
-                detail=f"Only YouTube Shorts (60 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
+                detail=f"Only short videos (30 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
             )
     
     try:
