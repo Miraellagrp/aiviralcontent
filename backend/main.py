@@ -125,8 +125,8 @@ def check_video_duration(video_url: str) -> dict:
         
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
-            # If we don't have API key, we'll assume it's allowed (fallback)
-            return {"is_short": True, "error": None, "duration": "unknown"}
+            # If we don't have API key, reject the request to maintain 30-second limit
+            return {"is_short": False, "error": "API key required for duration check", "duration": None}
         
         # YouTube Data API v3 call
         youtube_api_url = f"https://www.googleapis.com/youtube/v3/videos"
@@ -140,8 +140,8 @@ def check_video_duration(video_url: str) -> dict:
         
         if response.status_code != 200:
             logger.warning(f"YouTube API error: {response.status_code}")
-            # Fallback: allow the video if API fails
-            return {"is_short": True, "error": "API unavailable", "duration": "unknown"}
+            # Reject the video if API fails to maintain 30-second limit
+            return {"is_short": False, "error": "YouTube API unavailable", "duration": None}
         
         data = response.json()
         
@@ -164,8 +164,8 @@ def check_video_duration(video_url: str) -> dict:
         
     except Exception as e:
         logger.error(f"Error checking video duration: {str(e)}")
-        # Fallback: allow the video if checking fails
-        return {"is_short": True, "error": "Duration check failed", "duration": "unknown"}
+        # Reject the video if checking fails to maintain 30-second limit
+        return {"is_short": False, "error": "Duration check failed", "duration": None}
 
 def parse_youtube_duration(duration_str: str) -> int:
     """Parse YouTube API duration string (ISO 8601) to seconds"""
@@ -224,14 +224,14 @@ def generate_titles(request: TitleRequest):
 async def payment_link(response: Response):
 	response.headers["Access-Control-Allow-Origin"] = "*"
 	return {
-		"checkout_url": "https://buy.stripe.com/test_aEU5lO8Io7CB36E6oo"
+		"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00"
 	}
 
 # Simple direct-checkout endpoint for connectivity testing
 @app.get("/direct-checkout")
 async def direct_checkout(response: Response):
 	response.headers["Access-Control-Allow-Origin"] = "*"
-	return {"checkout_url": "https://buy.stripe.com/test_00g5lO2mccUT4ww5kk"}
+	return {"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00"}
 
 # Hard-coded test endpoint for Stripe checkout URL
 @app.post("/test-checkout")
@@ -240,9 +240,9 @@ async def test_checkout(response: Response):
 	response.headers["Access-Control-Allow-Origin"] = "*"
 	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
 	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	# Return a test checkout URL
+	# Return the production checkout URL
 	return {
-		"checkout_url": "https://buy.stripe.com/test_00g5lO2mccUT4ww5kk",
+		"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00",
 		"status": "success"
 	}
 
@@ -396,11 +396,15 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
             detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
         )
     
-    # Check if video is a Short (≤60 seconds)
+    # Check if video is a Short (≤30 seconds)
     duration_check = check_video_duration(youtube_url)
     if not duration_check["is_short"]:
         if duration_check["error"]:
             logger.warning(f"Duration check error: {duration_check['error']} for URL: {youtube_url}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unable to verify video duration. Only short videos (30 seconds or less) are supported in the free tier. Please use a valid YouTube video URL or upgrade to lifetime access at aiviralcontent.io"
+            )
         else:
             logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
             raise HTTPException(
