@@ -159,24 +159,18 @@ def generate_gemini(youtube_url: str = Query(..., description="YouTube video URL
     try:
         logger.info(f"Processing Vertex AI request for URL: {youtube_url[:50]}...")
         
-        # Initialize GenAI client with Vertex AI
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", "custom-tine-464511-u1")
-        
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location="us-central1"
-        )
-        
-        logger.info(f"Successfully initialized Vertex AI client with project: {project_id}")
-        
-        # If we don't have proper credentials, use fallback
-        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") and not os.environ.get("GOOGLE_API_KEY"):
-            logger.warning("No valid credentials found, using fallback")
+        # Initialize GenAI client with API key
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            logger.warning("No GOOGLE_API_KEY found, using fallback")
             return GeminiResponse(
                 description="🚀 How This Video Could Go VIRAL! (AI Analysis)", 
                 keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
             )
+        
+        client = genai.Client(api_key=api_key)
+        
+        logger.info("Successfully initialized GenAI client with API key")
         
         # Create the content with video URL and prompt
         prompt_text = """Please write a 40 character long intriguing title of this video and 10 comma separated hashtags that will be used for youtube shorts. Format the response as a python dictionary {"Description": title of video(not more than 50 characters), "Keywords": comma separated hashtags(10)}"""
