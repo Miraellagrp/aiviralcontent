@@ -368,7 +368,7 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
 # Additional API endpoints
 @app.get("/")
 def read_root():
-    return {"message": "AI Viral Content API is running!", "status": "healthy"}
+    return {"message": "AI Viral Content API is running!", "status": "healthy", "version": "2.0-with-access-codes"}
 
 @app.get("/payment-link")
 def get_payment_link():
@@ -441,6 +441,21 @@ def test_generate_code():
     """Test endpoint to generate access codes (for testing only)"""
     code = generate_unique_access_code()
     return {"access_code": code, "message": "Test code generated (valid for one use)"}
+
+@app.get("/debug-access-code")
+def debug_access_code(access_code: Optional[str] = Query(None)):
+    """Debug endpoint to test access code validation"""
+    if not access_code:
+        return {"error": "No access code provided"}
+    
+    is_valid = is_premium_user(access_code)
+    return {
+        "access_code": access_code,
+        "is_valid": is_valid,
+        "used_codes_count": len(used_access_codes),
+        "code_upper": access_code.strip().upper(),
+        "in_used_codes": access_code.strip().upper() in used_access_codes
+    }
 
 if __name__ == "__main__":
     import uvicorn
