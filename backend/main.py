@@ -411,6 +411,10 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
 def read_root():
     return {"message": "AI Viral Content API is running!", "status": "healthy", "version": "2.0-with-access-codes"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "AI Viral Content API"}
+
 @app.get("/payment-link")
 def get_payment_link():
     """Return Stripe payment link"""
