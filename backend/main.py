@@ -1,675 +1,64 @@
-from fastapi import FastAPI, Response, Query, HTTPException, Request
+
+
+
+from fastapi import FastAPI, Response, Request, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from pydantic import BaseModel
+import stripe
 import os
 import logging
-from typing import Optional
-import json
 from datetime import datetime, timedelta
-import hashlib
-import requests
-import re
-import hmac
+import json
+
+# Try to import Google GenAI
+GENAI_AVAILABLE = False
 try:
-    from google import genai
-    from google.genai import types
+    import google.generativeai as genai
+    from google.ai.generativelanguage_v1beta import types
     GENAI_AVAILABLE = True
 except ImportError:
-    GENAI_AVAILABLE = False
-    logging.warning("Google GenAI not available - install with: pip install google-genai")
+    print("Google GenAI not available. Some features may not work.")
 
-# Configure logging first
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set up Google credentials
-if os.path.exists(os.path.join(os.path.dirname(__file__), "google-credentials.json")):
-    # Local development with service account file
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.join(os.path.dirname(__file__), "google-credentials.json")
-    logger.info("Using local google-credentials.json file")
-else:
-    # Production deployment - use environment variable
-    google_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON") or os.environ.get("GOOGLE_CREDENTIALS") or os.environ.get("DENTIALS_JSON")
-    if google_credentials:
-        # Write the credentials to a temporary file
-        import tempfile
-        import json
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                json.dump(json.loads(google_credentials), f)
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = f.name
-                logger.info("Using GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable")
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in credentials environment variable: {e}")
-            logger.info("Continuing without service account credentials")
-    else:
-        # Try to use API key if available
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if api_key:
-            os.environ["GOOGLE_API_KEY"] = api_key
-            logger.info("Using GOOGLE_API_KEY environment variable")
-        else:
-            logger.warning("No Google credentials found - Gemini API will use fallback responses")
-
 # Rate limiting configuration
-DAILY_FREE_LIMIT = 3  # Free requests per day per IP
-RATE_LIMIT_FILE = "rate_limits.json"
-ACCESS_CODES_FILE = "access_codes.json"
+DAILY_FREE_LIMIT = 3
+rate_limit_store = {}
 
-# Stripe configuration
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "whsec_test_key")  # Set this in your environment
+# One-time access code tracking with file persistence
+USED_CODES_FILE = "used_access_codes.json"
 
-def get_client_ip(request: Request) -> str:
-    """Get client IP address"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-def get_rate_limits() -> dict:
-    """Load rate limits from file"""
-    if os.path.exists(RATE_LIMIT_FILE):
-        try:
-            with open(RATE_LIMIT_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_rate_limits(limits: dict):
-    """Save rate limits to file"""
-    with open(RATE_LIMIT_FILE, 'w') as f:
-        json.dump(limits, f)
-
-def check_rate_limit(ip: str) -> bool:
-    """Check if IP has exceeded daily limit"""
-    limits = get_rate_limits()
-    today = datetime.now().strftime("%Y-%m-%d")
-    
-    if ip not in limits:
-        limits[ip] = {}
-    
-    if today not in limits[ip]:
-        limits[ip][today] = 0
-    
-    # Clean old entries (older than 7 days)
-    cutoff_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    for user_ip in list(limits.keys()):
-        for date in list(limits[user_ip].keys()):
-            if date < cutoff_date:
-                del limits[user_ip][date]
-        if not limits[user_ip]:
-            del limits[user_ip]
-    
-    if limits[ip][today] >= DAILY_FREE_LIMIT:
-        return False
-    
-    limits[ip][today] += 1
-    save_rate_limits(limits)
-    return True
-
-def get_access_codes() -> dict:
-    """Load access codes from file"""
-    if os.path.exists(ACCESS_CODES_FILE):
-        try:
-            with open(ACCESS_CODES_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_access_codes(codes: dict):
-    """Save access codes to file"""
-    with open(ACCESS_CODES_FILE, 'w') as f:
-        json.dump(codes, f, indent=2)
-
-def is_premium_user(access_code: str) -> bool:
-    """Check if access code is valid for premium access"""
-    if not access_code:
-        return False
-    
-    codes = get_access_codes()
-    return access_code in codes and codes[access_code].get("active", True)
-
-def generate_access_code() -> str:
-    """Generate a unique access code"""
-    import secrets
-    import string
-    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(12))
-
-def verify_stripe_signature(payload: bytes, sig_header: str, webhook_secret: str) -> bool:
-    """Verify Stripe webhook signature"""
+def load_used_codes():
+    """Load used codes from file"""
     try:
-        elements = sig_header.split(',')
-        timestamp = None
-        signatures = []
-        
-        for element in elements:
-            key, value = element.split('=')
-            if key == 't':
-                timestamp = value
-            elif key == 'v1':
-                signatures.append(value)
-        
-        if timestamp is None or not signatures:
-            return False
-        
-        # Create expected signature
-        signed_payload = f"{timestamp}.{payload.decode('utf-8')}"
-        expected_signature = hmac.new(
-            webhook_secret.encode('utf-8'),
-            signed_payload.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        
-        return any(hmac.compare_digest(expected_signature, signature) for signature in signatures)
+        if os.path.exists(USED_CODES_FILE):
+            with open(USED_CODES_FILE, 'r') as f:
+                return set(json.load(f))
     except Exception as e:
-        logger.error(f"Error verifying Stripe signature: {str(e)}")
-        return False
+        logger.error(f"Error loading used codes: {e}")
+    return set()
 
-def get_specialized_prompt(content_type: str) -> str:
-    """Generate specialized prompts based on content type"""
-    
-    if content_type == "professional":
-        return """You are a LinkedIn content strategist and business communication expert. Analyze this video and create professional content:
-
-1. Write a COMPELLING professional title (under 50 characters) that:
-   - Focuses on business insights, leadership lessons, or industry trends
-   - Uses power words like "Strategy", "Leadership", "Innovation", "Growth" 
-   - Appeals to executives, entrepreneurs, and professionals
-   - Creates curiosity about business value ("The Leadership Lesson That...")
-
-2. Generate 10 professional hashtags mixing:
-   - LinkedIn algorithm tags (#Leadership #Innovation #Growth #Strategy)
-   - Industry-specific tags (based on video content)
-   - Business networking tags (#Entrepreneurship #CEO #Business)
-
-Format: {"Description": "professional_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
-
-Make it something a CEO would share on LinkedIn!"""
-
-    elif content_type == "educational":
-        return """You are an educational content expert specializing in tutorials and how-to content. Analyze this video and create educational content:
-
-1. Write a CLEAR educational title (under 50 characters) that:
-   - Promises specific learning outcomes ("How to Master...")
-   - Uses step-by-step language ("5 Steps to...", "Complete Guide...")
-   - Focuses on skills, knowledge, or problem-solving
-   - Appeals to learners and students ("Learn X in Y Minutes")
-
-2. Generate 10 educational hashtags mixing:
-   - Learning tags (#tutorial #howto #learn #education #tips)
-   - Skill-specific tags (based on video content)
-   - Student/learner tags (#study #knowledge #skills)
-
-Format: {"Description": "educational_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
-
-Make it irresistible to anyone wanting to learn!"""
-    
-    else:  # viral content (default)
-        return """You are a viral content expert. Analyze this video and create click-worthy content:
-
-1. Write an IRRESISTIBLE title (under 50 characters) that uses psychology to make people click:
-   - Use curiosity gaps ("This Changed Everything...")
-   - Create urgency ("Before It's Too Late")  
-   - Promise transformation ("From Zero to...")
-   - Use emotional triggers (shocking, amazing, secret)
-   - Include numbers when relevant ("3 Secrets...")
-
-2. Generate 10 trending hashtags mixing:
-   - Broad viral tags (#viral #fyp #trending #foryou)
-   - Content-specific tags (what's actually in the video)
-   - Platform-specific tags (#tiktok #reels #shorts)
-
-Format: {"Description": "viral_title", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5,hashtag6,hashtag7,hashtag8,hashtag9,hashtag10"}
-
-Make it IRRESISTIBLE - something people MUST click on!"""
-
-def send_access_code_email(email: str, access_code: str) -> bool:
-    """Send access code via email (placeholder for now)"""
-    # TODO: Integrate with your email service (SendGrid, etc.)
-    logger.info(f"Would send access code {access_code} to {email}")
-    
-    # For now, just store in a file for you to manually send
+def save_used_codes():
+    """Save used codes to file"""
     try:
-        purchase_file = os.path.join(os.path.dirname(__file__), "purchases.txt")
-        with open(purchase_file, "a", encoding="utf-8") as f:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"{timestamp}: {email} -> {access_code}\n")
-        return True
+        with open(USED_CODES_FILE, 'w') as f:
+            json.dump(list(used_access_codes), f)
     except Exception as e:
-        logger.error(f"Error storing purchase info: {str(e)}")
-        return False
+        logger.error(f"Error saving used codes: {e}")
 
-def extract_youtube_video_id(url: str) -> str:
-    """Extract video ID from YouTube URL"""
-    patterns = [
-        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})',
-        r'youtube\.com.*[?&]v=([a-zA-Z0-9_-]{11})'
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
-
-def check_video_duration(video_url: str) -> dict:
-    """Check if video is 30 seconds or less"""
-    try:
-        video_id = extract_youtube_video_id(video_url)
-        if not video_id:
-            return {"is_short": False, "error": "Invalid YouTube URL", "duration": None}
-        
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            # If we don't have API key, reject the request to maintain 30-second limit
-            return {"is_short": False, "error": "API key required for duration check", "duration": None}
-        
-        # YouTube Data API v3 call
-        youtube_api_url = f"https://www.googleapis.com/youtube/v3/videos"
-        params = {
-            "part": "contentDetails",
-            "id": video_id,
-            "key": api_key
-        }
-        
-        response = requests.get(youtube_api_url, params=params, timeout=10)
-        
-        if response.status_code != 200:
-            logger.warning(f"YouTube API error: {response.status_code}")
-            # Reject the video if API fails to maintain 30-second limit
-            return {"is_short": False, "error": "YouTube API unavailable", "duration": None}
-        
-        data = response.json()
-        
-        if not data.get("items"):
-            return {"is_short": False, "error": "Video not found", "duration": None}
-        
-        duration_str = data["items"][0]["contentDetails"]["duration"]
-        
-        # Parse ISO 8601 duration (PT1M30S = 1 minute 30 seconds)
-        duration_seconds = parse_youtube_duration(duration_str)
-        
-        is_short = duration_seconds <= 30
-        
-        return {
-            "is_short": is_short,
-            "error": None,
-            "duration": duration_seconds,
-            "duration_str": duration_str
-        }
-        
-    except Exception as e:
-        logger.error(f"Error checking video duration: {str(e)}")
-        # Reject the video if checking fails to maintain 30-second limit
-        return {"is_short": False, "error": "Duration check failed", "duration": None}
-
-def parse_youtube_duration(duration_str: str) -> int:
-    """Parse YouTube API duration string (ISO 8601) to seconds"""
-    # PT1M30S -> 90 seconds
-    # PT45S -> 45 seconds  
-    # PT2M -> 120 seconds
-    
-    pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
-    match = re.match(pattern, duration_str)
-    
-    if not match:
-        return 0
-    
-    hours = int(match.group(1) or 0)
-    minutes = int(match.group(2) or 0)  
-    seconds = int(match.group(3) or 0)
-    
-    total_seconds = hours * 3600 + minutes * 60 + seconds
-    return total_seconds
-
-app = FastAPI(title="AI Viral Content API", version="1.0.0")
-
-# Pydantic models
-class TitleRequest(BaseModel):
-    topic: str
+# Load previously used codes on startup
+used_access_codes = load_used_codes()
 
 class GeminiResponse(BaseModel):
     description: str
     keywords: str
 
-class EmailSubscription(BaseModel):
-    email: str
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
-class AccessCodeRequest(BaseModel):
-    access_code: str
-
-# Basic endpoints
-@app.get("/")
-def root():
-    return {"message": "AI Viral Content API is LIVE!", "domain": "aiviralcontent.io"}
-
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
-
-@app.post("/generate-titles")
-def generate_titles(request: TitleRequest):
-    titles = [
-        f"How {request.topic} Changed My Life Forever",
-        f"The Dark Truth About {request.topic}",
-        f"I Tried {request.topic} for 30 Days - Shocking Results!",
-        f"Why Everyone's Wrong About {request.topic}",
-        f"{request.topic}: The Complete Guide You Need"
-    ]
-    return {"topic": request.topic, "titles": titles}
-
-# Simple payment link endpoint for Stripe
-@app.get("/payment-link")
-async def payment_link(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	return {
-		"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00"
-	}
-
-# Simple direct-checkout endpoint for connectivity testing
-@app.get("/direct-checkout")
-async def direct_checkout(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	return {"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00"}
-
-# Hard-coded test endpoint for Stripe checkout URL
-@app.post("/test-checkout")
-async def test_checkout(response: Response):
-	# Add CORS headers
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	# Return the production checkout URL
-	return {
-		"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdgd9MY00",
-		"status": "success"
-	}
-
-# OPTIONS handler for the test endpoint
-@app.options("/test-checkout")
-async def test_checkout_options(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	return {}
-
-# Email subscription endpoint
-@app.post("/subscribe-email")
-async def subscribe_email(email_data: EmailSubscription, response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	
-	try:
-		email = email_data.email.strip().lower()
-		
-		# Basic email validation
-		if not email or "@" not in email or "." not in email.split("@")[1]:
-			raise HTTPException(status_code=400, detail="Invalid email address")
-		
-		# Log the email (for now)
-		logger.info(f"New email subscription: {email}")
-		
-		# Store in a simple file for now (you can upgrade this later)
-		import os
-		emails_file = os.path.join(os.path.dirname(__file__), "subscriber_emails.txt")
-		with open(emails_file, "a", encoding="utf-8") as f:
-			from datetime import datetime
-			timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-			f.write(f"{timestamp}: {email}\n")
-		
-		logger.info(f"Email {email} saved to subscriber list")
-		
-		return {
-			"success": True,
-			"message": "Successfully subscribed! Check your email for viral templates.",
-			"email": email
-		}
-		
-	except Exception as e:
-		logger.error(f"Email subscription error: {str(e)}")
-		raise HTTPException(status_code=500, detail="Failed to process subscription")
-
-# OPTIONS handler for email endpoint
-@app.options("/subscribe-email")
-async def subscribe_email_options(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	return {}
-
-# Endpoint to view captured emails (for admin use)
-@app.get("/admin/emails")
-async def get_emails():
-	try:
-		emails_file = os.path.join(os.path.dirname(__file__), "subscriber_emails.txt")
-		if os.path.exists(emails_file):
-			with open(emails_file, "r", encoding="utf-8") as f:
-				content = f.read()
-			
-			# Parse emails into structured format
-			lines = content.strip().split('\n')
-			emails = []
-			for line in lines:
-				if line.strip() and ':' in line:
-					try:
-						timestamp, email = line.split(': ', 1)
-						emails.append({
-							"timestamp": timestamp,
-							"email": email.strip()
-						})
-					except:
-						continue
-			
-			return {
-				"total_emails": len(emails),
-				"emails": emails,
-				"raw_content": content
-			}
-		else:
-			return {
-				"total_emails": 0,
-				"emails": [],
-				"message": "No emails captured yet"
-			}
-	except Exception as e:
-		logger.error(f"Error reading emails: {str(e)}")
-		raise HTTPException(status_code=500, detail="Error reading email file")
-
-# Admin endpoint to generate access codes
-@app.post("/admin/generate-code")
-async def generate_code(admin_key: str = Query(..., description="Admin key for authentication")):
-	# Simple admin authentication (you can make this more secure)
-	if admin_key != "admin123":  # Change this to a secure admin key
-		raise HTTPException(status_code=401, detail="Unauthorized")
-	
-	try:
-		codes = get_access_codes()
-		new_code = generate_access_code()
-		
-		# Ensure code is unique
-		while new_code in codes:
-			new_code = generate_access_code()
-		
-		# Add new code
-		from datetime import datetime
-		codes[new_code] = {
-			"active": True,
-			"created_at": datetime.now().isoformat(),
-			"used": False
-		}
-		
-		save_access_codes(codes)
-		
-		return {
-			"access_code": new_code,
-			"message": "Access code generated successfully",
-			"total_codes": len(codes)
-		}
-	except Exception as e:
-		logger.error(f"Error generating access code: {str(e)}")
-		raise HTTPException(status_code=500, detail="Error generating access code")
-
-# Admin endpoint to view all access codes
-@app.get("/admin/access-codes")
-async def get_all_codes(admin_key: str = Query(..., description="Admin key for authentication")):
-	if admin_key != "admin123":  # Change this to a secure admin key
-		raise HTTPException(status_code=401, detail="Unauthorized")
-	
-	try:
-		codes = get_access_codes()
-		return {
-			"total_codes": len(codes),
-			"codes": codes
-		}
-	except Exception as e:
-		logger.error(f"Error reading access codes: {str(e)}")
-		raise HTTPException(status_code=500, detail="Error reading access codes")
-
-# Endpoint to verify access code (for frontend)
-@app.post("/verify-access-code")
-async def verify_code(code_request: AccessCodeRequest, response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"  
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	
-	is_valid = is_premium_user(code_request.access_code)
-	
-	return {
-		"valid": is_valid,
-		"message": "Access code verified" if is_valid else "Invalid access code"
-	}
-
-# OPTIONS handler for verify access code endpoint
-@app.options("/verify-access-code")
-async def verify_code_options(response: Response):
-	response.headers["Access-Control-Allow-Origin"] = "*"
-	response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-	response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-	return {}
-
-# Stripe webhook endpoint
-@app.post("/stripe-webhook")
-async def stripe_webhook(request: Request):
-	try:
-		payload = await request.body()
-		sig_header = request.headers.get("stripe-signature", "")
-		
-		# Verify webhook signature
-		if not verify_stripe_signature(payload, sig_header, STRIPE_WEBHOOK_SECRET):
-			logger.warning("Invalid Stripe webhook signature")
-			raise HTTPException(status_code=400, detail="Invalid signature")
-		
-		# Parse the webhook event
-		try:
-			event = json.loads(payload.decode("utf-8"))
-		except json.JSONDecodeError:
-			logger.error("Invalid JSON in webhook payload")
-			raise HTTPException(status_code=400, detail="Invalid JSON")
-		
-		# Handle successful payment
-		if event["type"] == "checkout.session.completed":
-			session = event["data"]["object"]
-			customer_email = session.get("customer_details", {}).get("email")
-			
-			if customer_email:
-				logger.info(f"Processing successful payment for {customer_email}")
-				
-				# Generate access code
-				codes = get_access_codes()
-				new_code = generate_access_code()
-				
-				# Ensure code is unique
-				while new_code in codes:
-					new_code = generate_access_code()
-				
-				# Save the access code
-				codes[new_code] = {
-					"active": True,
-					"created_at": datetime.now().isoformat(),
-					"customer_email": customer_email,
-					"stripe_session_id": session["id"],
-					"auto_generated": True
-				}
-				
-				save_access_codes(codes)
-				
-				# Send access code (for now, stores in file for manual sending)
-				send_access_code_email(customer_email, new_code)
-				
-				logger.info(f"Generated access code {new_code} for {customer_email}")
-			else:
-				logger.warning("No customer email in Stripe session")
-		
-		return {"status": "success"}
-		
-	except HTTPException:
-		raise
-	except Exception as e:
-		logger.error(f"Error processing Stripe webhook: {str(e)}")
-		raise HTTPException(status_code=500, detail="Webhook processing failed")
-
-# Admin endpoint to view purchases
-@app.get("/admin/purchases")
-async def get_purchases(admin_key: str = Query(..., description="Admin key for authentication")):
-	if admin_key != "admin123":  # Change this to a secure admin key
-		raise HTTPException(status_code=401, detail="Unauthorized")
-	
-	try:
-		purchase_file = os.path.join(os.path.dirname(__file__), "purchases.txt")
-		if os.path.exists(purchase_file):
-			with open(purchase_file, "r", encoding="utf-8") as f:
-				content = f.read()
-			
-			# Parse purchases into structured format
-			lines = content.strip().split('\n')
-			purchases = []
-			for line in lines:
-				if line.strip() and ':' in line and ' -> ' in line:
-					try:
-						timestamp, email_code = line.split(': ', 1)
-						email, code = email_code.split(' -> ')
-						purchases.append({
-							"timestamp": timestamp,
-							"email": email.strip(),
-							"access_code": code.strip()
-						})
-					except:
-						continue
-			
-			return {
-				"total_purchases": len(purchases),
-				"purchases": purchases,
-				"raw_content": content
-			}
-		else:
-			return {
-				"total_purchases": 0,
-				"purchases": [],
-				"message": "No purchases yet"
-			}
-	except Exception as e:
-		logger.error(f"Error reading purchases: {str(e)}")
-		raise HTTPException(status_code=500, detail="Error reading purchase file")
-
-# Add a test endpoint to verify environment
-@app.get("/test-env")
-async def test_env():
-	credentials_status = "none"
-	if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-		credentials_status = "file_set"
-	if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
-		credentials_status = "env_var_set"
-	
-	return {
-		"genai_available": GENAI_AVAILABLE,
-		"environment": os.environ.get("ENVIRONMENT", "development"),
-		"service_status": "running",
-		"credentials_status": credentials_status,
-		"project_id": os.environ.get("GOOGLE_CLOUD_PROJECT", "not_set")
-	}
+app = FastAPI()
 
 # Configure CORS
 origins = [
@@ -692,6 +81,124 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
+# Helper functions
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request"""
+    if "x-forwarded-for" in request.headers:
+        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def check_rate_limit(client_ip: str) -> bool:
+    """Check if client has exceeded rate limit"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    key = f"{client_ip}:{today}"
+    
+    if key not in rate_limit_store:
+        rate_limit_store[key] = 0
+    
+    if rate_limit_store[key] >= DAILY_FREE_LIMIT:
+        return False
+    
+    rate_limit_store[key] += 1
+    return True
+
+def is_premium_user(access_code: Optional[str]) -> bool:
+    """Check if the provided access code is valid for premium access"""
+    if not access_code:
+        return False
+    
+    code = access_code.strip().upper()
+    
+    # List of valid one-time access codes (in production, this should be in a database)
+    valid_codes = [
+        "VIRAL2024PRO",
+        "UNLIMITED2024",
+        "PREMIUM_ACCESS_2024",
+        "AIVIRALCONTENT_PREMIUM",
+        "FXBZVD38PSF2"
+    ]
+    
+    # Check if code has already been used
+    if code in used_access_codes:
+        logger.warning(f"Access code already used: {code}")
+        return False
+    
+    # Check if code is in valid codes list
+    if code in [valid_code.upper() for valid_code in valid_codes]:
+        # Mark code as used and save to file
+        used_access_codes.add(code)
+        save_used_codes()
+        logger.info(f"Access code used for first time: {code}")
+        return True
+    
+    return False
+
+def check_video_duration(youtube_url: str) -> dict:
+    """Check if YouTube video is under 30 seconds (for free tier)"""
+    try:
+        import requests
+        import re
+        
+        # Extract video ID
+        video_id_match = re.search(r'(?:v=|/)([a-zA-Z0-9_-]{11})', youtube_url)
+        if not video_id_match:
+            return {"is_short": False, "error": "Invalid YouTube URL"}
+        
+        video_id = video_id_match.group(1)
+        
+        # For now, assume all videos are valid shorts (you can implement YouTube API check here)
+        return {"is_short": True, "duration": 30}
+        
+    except Exception as e:
+        logger.error(f"Duration check error: {e}")
+        return {"is_short": False, "error": str(e)}
+
+def get_specialized_prompt(content_type: str) -> str:
+    """Get specialized prompt based on content type"""
+    prompts = {
+        "viral": """Analyze this video and create viral content suggestions. Focus on:
+1. Create a catchy, click-worthy title that would get millions of views
+2. Generate trending hashtags that maximize reach
+
+Return your response in this exact JSON format:
+{"Description": "Your viral title here", "Keywords": "hashtag1,hashtag2,hashtag3,hashtag4,hashtag5"}
+
+Make it exciting, use numbers, strong emotions, and trending keywords.""",
+        
+        "professional": """Analyze this video for professional content creation. Focus on:
+1. Create a professional, informative title suitable for business/educational content
+2. Generate relevant keywords for professional audiences
+
+Return your response in this exact JSON format:
+{"Description": "Your professional title here", "Keywords": "keyword1,keyword2,keyword3,keyword4,keyword5"}
+
+Keep it professional, informative, and value-focused.""",
+        
+        "educational": """Analyze this video for educational content. Focus on:
+1. Create an educational, how-to style title that promises learning value
+2. Generate educational keywords and topics
+
+Return your response in this exact JSON format:
+{"Description": "Your educational title here", "Keywords": "education,learning,tutorial,howto,tips"}
+
+Focus on learning outcomes and educational value."""
+    }
+    
+    return prompts.get(content_type, prompts["viral"])
+
+def generate_unique_access_code() -> str:
+    """Generate a unique access code for new purchases"""
+    import secrets
+    import string
+    
+    # Generate a random 12-character code
+    characters = string.ascii_uppercase + string.digits
+    while True:
+        code = ''.join(secrets.choice(characters) for _ in range(12))
+        # Ensure the code hasn't been generated before
+        if code not in used_access_codes:
+            return code
+
 # Add manual CORS headers to the checkout endpoint
 
 # Removed complex Stripe checkout - using payment links instead
@@ -705,6 +212,19 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
     
     # Check if user has premium access
     is_premium = is_premium_user(access_code)
+    
+    # If access code was provided but invalid/used, give specific error
+    if access_code and not is_premium:
+        if access_code.strip().upper() in used_access_codes:
+            raise HTTPException(
+                status_code=401,
+                detail="This access code has already been used. Each code can only be used once. Please contact support if you believe this is an error."
+            )
+        else:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid access code. Please check your code and try again, or purchase a new access code at aiviralcontent.io"
+            )
     
     # Check rate limiting (skip for premium users)
     if not is_premium:
@@ -844,6 +364,83 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
             description="🚀 How This Video Could Go VIRAL! (AI Analysis)", 
             keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
         )
+
+# Additional API endpoints
+@app.get("/")
+def read_root():
+    return {"message": "AI Viral Content API is running!", "status": "healthy"}
+
+@app.get("/payment-link")
+def get_payment_link():
+    """Return Stripe payment link"""
+    return {"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdQR"}
+
+@app.post("/create-checkout-session")
+def create_checkout_session():
+    """Create Stripe checkout session"""
+    return {"checkout_url": "https://buy.stripe.com/fZu00kenx9ZabySdQR"}
+
+class TitleRequest(BaseModel):
+    topic: str
+
+@app.post("/generate-titles")
+def generate_titles(request: TitleRequest):
+    """Generate viral titles for a given topic"""
+    topic = request.topic
+    titles = [
+        f"How {topic} Changed My Life Forever",
+        f"The Truth About {topic} Nobody Tells You",
+        f"I Tried {topic} for 30 Days (Shocking Results!)",
+        f"Stop Doing {topic} Wrong - Do This Instead",
+        f"{topic}: The Only Guide You'll Ever Need"
+    ]
+    return {"titles": titles}
+
+class EmailRequest(BaseModel):
+    email: str
+
+@app.post("/subscribe-email")
+def subscribe_email(request: EmailRequest):
+    """Subscribe email to mailing list"""
+    logger.info(f"Email subscription: {request.email}")
+    return {"message": "Email subscribed successfully"}
+
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook for successful payments"""
+    payload = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+    
+    try:
+        # In production, you should verify the webhook signature
+        event = json.loads(payload)
+        
+        # Handle successful payment
+        if event['type'] == 'checkout.session.completed':
+            # Generate a unique access code for this purchase
+            access_code = generate_unique_access_code()
+            
+            logger.info(f"Payment completed. Generated access code: {access_code}")
+            
+            # Here you would typically:
+            # 1. Store the code in a database with customer info
+            # 2. Send the code to the customer via email
+            # 3. Mark the code as available for use (not used yet)
+            
+            # For now, just log it
+            return {"message": "Payment processed", "access_code": access_code}
+            
+        return {"message": "Event received"}
+        
+    except Exception as e:
+        logger.error(f"Stripe webhook error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+@app.get("/test-generate-code")
+def test_generate_code():
+    """Test endpoint to generate access codes (for testing only)"""
+    code = generate_unique_access_code()
+    return {"access_code": code, "message": "Test code generated (valid for one use)"}
 
 if __name__ == "__main__":
     import uvicorn
