@@ -15,10 +15,10 @@ import json
 GENAI_AVAILABLE = False
 try:
     import google.generativeai as genai
-    from google.ai.generativelanguage_v1beta import types
     GENAI_AVAILABLE = True
 except ImportError:
     print("Google GenAI not available. Some features may not work.")
+    genai = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -306,40 +306,35 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
                 keywords="viral,trending,youtube,content,ai,shorts,video,social,media,engagement"
             )
         
-        client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
         
         logger.info("Successfully initialized GenAI client with API key")
         
         # Get specialized prompt based on content type
         prompt_text = get_specialized_prompt(content_type)
         
-        contents = [
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_uri(file_uri=youtube_url, mime_type="video/*"),
-                    types.Part.from_text(text=prompt_text)
-                ]
-            )
-        ]
-        
         output = ""
         try:
-            model = "gemini-1.5-flash"
-            generate_config = types.GenerateContentConfig(
-                temperature=1.0,
-                top_p=0.95,
-                max_output_tokens=1024,
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            
+            # Create content with video URL and prompt
+            full_prompt = f"""
+            Please analyze this YouTube video: {youtube_url}
+            
+            {prompt_text}
+            """
+            
+            response = model.generate_content(
+                full_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=1.0,
+                    top_p=0.95,
+                    max_output_tokens=1024,
+                )
             )
             
-            for chunk in client.models.generate_content_stream(
-                model=model,
-                contents=contents,
-                config=generate_config,
-            ):
-                output += chunk.text
-                
-            logger.info(f"Vertex AI response received: {len(output)} characters")
+            output = response.text
+            logger.info(f"GenAI response received: {len(output)} characters")
         except Exception as generation_error:
             logger.warning(f"Generation error: {generation_error}, using fallback")
             return GeminiResponse(
