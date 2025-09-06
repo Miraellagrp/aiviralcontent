@@ -25,8 +25,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Rate limiting configuration
-DAILY_FREE_LIMIT = 3
+DAILY_FREE_LIMIT = 2  # Reduced from 3 to 2 for launch protection
 rate_limit_store = {}
+blocked_ips = set()  # Track IPs that exceeded limits multiple days
+last_request_time = {}  # Track last request time per IP for spam prevention
 
 # One-time access code tracking with file persistence
 USED_CODES_FILE = "used_access_codes.json"
@@ -90,6 +92,11 @@ def get_client_ip(request: Request) -> str:
 
 def check_rate_limit(client_ip: str) -> bool:
     """Check if client has exceeded rate limit"""
+    # Block IPs that have been flagged for abuse
+    if client_ip in blocked_ips:
+        logger.warning(f"Blocked IP attempted access: {client_ip}")
+        return False
+    
     today = datetime.now().strftime("%Y-%m-%d")
     key = f"{client_ip}:{today}"
     
@@ -97,6 +104,16 @@ def check_rate_limit(client_ip: str) -> bool:
         rate_limit_store[key] = 0
     
     if rate_limit_store[key] >= DAILY_FREE_LIMIT:
+        # Track repeat offenders - block after 3 days of hitting limit
+        offender_key = f"{client_ip}:offender_count"
+        if offender_key not in rate_limit_store:
+            rate_limit_store[offender_key] = 0
+        rate_limit_store[offender_key] += 1
+        
+        if rate_limit_store[offender_key] >= 3:
+            blocked_ips.add(client_ip)
+            logger.warning(f"IP blocked for repeated abuse: {client_ip}")
+        
         return False
     
     rate_limit_store[key] += 1
@@ -139,7 +156,7 @@ def is_premium_user(access_code: Optional[str]) -> bool:
     return False
 
 def check_video_duration(youtube_url: str) -> dict:
-    """Check if YouTube video is under 30 seconds (for free tier)"""
+    """Check if YouTube video is under 15 seconds (stricter for launch)"""
     try:
         import requests
         import re
@@ -151,8 +168,13 @@ def check_video_duration(youtube_url: str) -> dict:
         
         video_id = video_id_match.group(1)
         
-        # For now, assume all videos are valid shorts (you can implement YouTube API check here)
-        return {"is_short": True, "duration": 30}
+        # Check if it's a YouTube Shorts URL (stronger indication of short video)
+        if "/shorts/" in youtube_url:
+            return {"is_short": True, "duration": 15}
+        
+        # For regular YouTube URLs, be more restrictive for launch
+        # In production, implement actual duration check via YouTube API
+        return {"is_short": False, "duration": 300, "error": "Only YouTube Shorts (under 15 seconds) allowed for free tier"}
         
     except Exception as e:
         logger.error(f"Duration check error: {e}")
@@ -234,11 +256,25 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
     # Check rate limiting (skip for premium users)
     if not is_premium:
         client_ip = get_client_ip(request)
+        
+        # Anti-spam: Require 30 second cooldown between requests
+        current_time = datetime.now()
+        if client_ip in last_request_time:
+            time_diff = (current_time - last_request_time[client_ip]).total_seconds()
+            if time_diff < 30:  # 30 second cooldown
+                logger.warning(f"Request too frequent from IP: {client_ip}")
+                raise HTTPException(
+                    status_code=429, 
+                    detail=f"Please wait {int(30 - time_diff)} seconds between requests. Upgrade to lifetime access for no cooldown restrictions."
+                )
+        
+        last_request_time[client_ip] = current_time
+        
         if not check_rate_limit(client_ip):
             logger.warning(f"Rate limit exceeded for IP: {client_ip}")
             raise HTTPException(
                 status_code=429, 
-                detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} requests per day). Please purchase our lifetime access for unlimited usage at aiviralcontent.io"
+                detail=f"Daily free limit exceeded ({DAILY_FREE_LIMIT} YouTube Shorts analyses per day). Upgrade to lifetime access for unlimited full-length video analysis at aiviralcontent.io"
             )
     
     # Check video duration (skip for premium users)
@@ -249,13 +285,13 @@ def generate_gemini(request: Request, youtube_url: str = Query(..., description=
                 logger.warning(f"Duration check error: {duration_check['error']} for URL: {youtube_url}")
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unable to verify video duration. Only short videos (30 seconds or less) are supported in the free tier. Please use a valid YouTube video URL or upgrade to lifetime access at aiviralcontent.io"
+                    detail=f"Free tier only supports YouTube Shorts (15 seconds or less). Please use a YouTube Shorts URL or upgrade to lifetime access for unlimited video analysis at aiviralcontent.io"
                 )
             else:
                 logger.warning(f"Video too long ({duration_check['duration']}s) for URL: {youtube_url}")
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Only short videos (30 seconds or less) are supported in the free tier. This video is {duration_check['duration']} seconds long. Upgrade to lifetime access for full-length videos at aiviralcontent.io"
+                    detail=f"Free tier only supports YouTube Shorts (15 seconds or less). Upgrade to lifetime access for unlimited video analysis at aiviralcontent.io"
                 )
     
     try:
