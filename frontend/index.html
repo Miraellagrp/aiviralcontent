@@ -533,7 +533,9 @@ displayTitles(data.titles);
         // Gemini Form Handler
         document.getElementById('gemini-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const youtubeUrl = document.getElementById('youtube-url').value;            const accessCode = document.getElementById('access-code').value;            const contentType = document.getElementById('content-type').value;
+            const youtubeUrl = document.getElementById('youtube-url').value;
+            const accessCode = document.getElementById('access-code').value;
+            const contentType = document.getElementById('content-type').value;
 
 
             const outputDiv = document.getElementById('gemini-output');
@@ -563,7 +565,8 @@ displayTitles(data.titles);
                         </div>`;
                 }
 
-                // Call Gemini API                let apiUrl = `${API_BASE}/generate-gemini?youtube_url=${encodeURIComponent(youtubeUrl)}`;
+                // Call Gemini API
+                let apiUrl = `${API_BASE}/generate-gemini?youtube_url=${encodeURIComponent(youtubeUrl)}&content_type=${encodeURIComponent(contentType)}`;
                 if (accessCode.trim()) {
                     apiUrl += `&access_code=${encodeURIComponent(accessCode)}`;
                 }
@@ -591,7 +594,7 @@ displayTitles(data.titles);
                     outputDiv.innerHTML = `
                         <div style="background: #fff3cd; padding: 20px; border-radius: 12px; color: #856404; text-align: center;">
                             <h3 style="color: #dc3545; margin-bottom: 15px;">🚀 Daily Free Limit Reached!</h3>
-                            <p style="margin-bottom: 15px;">You've used your 3 free AI analyses for today.</p>
+                            <p style="margin-bottom: 15px;">You've used your 2 free AI analyses for today.</p>
                             <p style="margin-bottom: 20px;"><strong>Get unlimited access now!</strong></p>
                             <a href="#stripe-payment-btn" onclick="document.getElementById('stripe-payment-btn').click()" 
                                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
@@ -600,13 +603,26 @@ displayTitles(data.titles);
                                🎯 Get Lifetime Access - $29.99
                             </a>
                             <p style="margin-top: 15px; font-size: 0.9em;">
-                                Or try again tomorrow for 3 more free uses!
+                                Or try again tomorrow for 2 more free uses!
                             </p>
-                        </div>`;                } else if (error.message.includes('YouTube Shorts') || error.message.includes('60 seconds')) {
+                        </div>`;                } else if (error.message.includes('Please wait') && error.message.includes('seconds between requests')) {
+                    outputDiv.innerHTML = `
+                        <div style="background: #ffeaa7; padding: 20px; border-radius: 12px; color: #d63031; text-align: center;">
+                            <h3 style="color: #d63031; margin-bottom: 15px;">⏳ Slow Down There!</h3>
+                            <p style="margin-bottom: 15px;">${error.message}</p>
+                            <p style="margin-bottom: 20px;"><strong>Want no cooldowns?</strong></p>
+                            <a href="#stripe-payment-btn" onclick="document.getElementById('stripe-payment-btn').click()" 
+                               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
+                               padding: 15px 30px; border-radius: 25px; text-decoration: none; font-weight: bold;
+                               display: inline-block; margin: 10px;">
+                               🎯 Get Lifetime Access - $29.99
+                            </a>
+                        </div>`;
+                } else if (error.message.includes('YouTube Shorts') || error.message.includes('15 seconds') || error.message.includes('60 seconds')) {
                     outputDiv.innerHTML = `
                         <div style="background: #e8f4fd; padding: 20px; border-radius: 12px; color: #0066cc; text-align: center;">
                             <h3 style="color: #dc3545; margin-bottom: 15px;">📱 Shorts Only in Free Tier</h3>
-                            <p style="margin-bottom: 15px;">Free users can only analyze YouTube Shorts (60 seconds or less).</p>
+                            <p style="margin-bottom: 15px;">Free users can only analyze YouTube Shorts (15 seconds or less).</p>
                             <p style="margin-bottom: 20px;"><strong>Want to analyze full-length videos?</strong></p>
                             <a href="#stripe-payment-btn" onclick="document.getElementById('stripe-payment-btn').click()" 
                                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; 
@@ -615,7 +631,7 @@ displayTitles(data.titles);
                                🎯 Get Lifetime Access - $29.99
                             </a>
                             <p style="margin-top: 15px; font-size: 0.9em;">
-                                Or try with a YouTube Short (≤60 seconds)
+                                Or try with a YouTube Short (≤15 seconds)
                             </p>
                         </div>`;
 
