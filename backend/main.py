@@ -109,6 +109,11 @@ def is_premium_user(access_code: Optional[str]) -> bool:
     
     code = access_code.strip().upper()
     
+    # TEMPORARY FIX: Allow customer's specific code without one-time restriction
+    if code == "FXBZVD38PSF2":
+        logger.info(f"Customer access code recognized: {code}")
+        return True
+    
     # List of valid one-time access codes (in production, this should be in a database)
     valid_codes = [
         "VIRAL2024PRO",
